@@ -14,7 +14,7 @@ import {
 const MY_JOB = {
   jobId:             randomBytes(16).toString('hex'),
   description:       'Train neural net on MNIST',
-  type:              'ml-training',
+  jobType:           'ml-training',
   cores:             2,
   ramGB:             4,
   estimatedMinutes:  1,
