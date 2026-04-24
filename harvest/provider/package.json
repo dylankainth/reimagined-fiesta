@@ -1,0 +1,22 @@
+{
+  "name": "harvest-provider",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.mjs",
+  "pear": {
+    "name": "harvest-provider",
+    "type": "terminal"
+  },
+  "dependencies": {
+    "@harvest/shared": "file:../shared",
+    "hyperswarm": "^4.17.0",
+    "corestore": "^7.9.2",
+    "hyperbee": "^2.27.3",
+    "protomux": "^3.10.0",
+    "compact-encoding": "^2.15.0",
+    "b4a": "^1.6.7",
+    "cli-table3": "^0.6.5",
+    "child_process": "npm:bare-node-child-process",
+    "crypto": "npm:bare-node-crypto"
+  }
+}
