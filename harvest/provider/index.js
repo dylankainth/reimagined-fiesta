@@ -207,17 +207,17 @@ function handleCancelJob(data, peerId) {
 function runJob(job) {
   const { jobId, peer } = job
 
-  // Python ML training simulation — 10 epochs, 500 ms each → ~5 s total
+  // Python ML training simulation — 30 epochs, 1 s each → ~30 s total
   const pythonCode = [
     'import time, json, random, math, sys',
-    'epochs = 10',
+    'epochs = 30',
     'accuracy = 0.0',
     'for epoch in range(1, epochs + 1):',
-    '    time.sleep(0.5)',
-    '    loss = math.exp(-epoch * 0.3) + random.uniform(0, 0.05)',
-    '    accuracy = 1 - math.exp(-epoch * 0.25) + random.uniform(-0.01, 0.02)',
+    '    time.sleep(1)',
+    '    loss = math.exp(-epoch * 0.15) + random.uniform(0, 0.05)',
+    '    accuracy = 1 - math.exp(-epoch * 0.12) + random.uniform(-0.01, 0.02)',
     '    accuracy = min(max(accuracy, 0.0), 0.99)',
-    '    print(json.dumps({"epoch": epoch, "total": 10, "loss": round(loss, 4), "accuracy": round(accuracy, 4)}), flush=True)',
+    '    print(json.dumps({"epoch": epoch, "total": 30, "loss": round(loss, 4), "accuracy": round(accuracy, 4)}), flush=True)',
     'print(json.dumps({"status": "done", "final_accuracy": round(accuracy, 4)}), flush=True)',
   ].join('\n')
 

@@ -17,7 +17,7 @@ const MY_JOB = {
   type:              'ml-training',
   cores:             2,
   ramGB:             4,
-  estimatedMinutes:  2,
+  estimatedMinutes:  1,
   maxBudgetUSDT:     0.05,
 }
 
@@ -191,8 +191,8 @@ function handleProgress(data) {
   if (!currentJob || currentJob.jobId !== jobId) return
 
   if (prog.epoch !== undefined) {
-    const bar = progressBar(prog.epoch, prog.total ?? 10)
-    const line = `Epoch ${String(prog.epoch).padStart(2)}/${prog.total ?? 10}  ${bar}  loss=${prog.loss.toFixed(4)}  acc=${(prog.accuracy * 100).toFixed(2)}%`
+    const bar = progressBar(prog.epoch, prog.total ?? 30)
+    const line = `Epoch ${String(prog.epoch).padStart(2)}/${prog.total ?? 30}  ${bar}  loss=${prog.loss.toFixed(4)}  acc=${(prog.accuracy * 100).toFixed(2)}%`
     epochLines.push(line)
     if (epochLines.length > 12) epochLines.shift()
   } else if (prog.status === 'done') {
