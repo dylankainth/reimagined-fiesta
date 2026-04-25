@@ -1,12 +1,44 @@
-import React from 'react'
+import React, { useState, useCallback } from 'react'
 import {
-  View, Text, ScrollView,
-  StyleSheet,
+  View, Text, TextInput, TouchableOpacity, ScrollView,
+  StyleSheet, FlatList,
 } from 'react-native'
+import { usePear } from '@/hooks/use-pear'
 import { useColorScheme } from '@/hooks/use-color-scheme'
 
-export default function VerifyScreen() {
+interface Message {
+  id: string
+  peerId: string
+  content: string
+  timestamp: number
+}
+
+export default function TestScreen() {
   const dark = useColorScheme() === 'dark'
+  const pear = usePear()
+  const [message, setMessage] = useState('')
+  const [messages, setMessages] = useState<Message[]>([])
+  const [selectedPeer, setSelectedPeer] = useState<string | null>(null)
+
+  const handleSendMessage = useCallback(() => {
+    if (!message.trim() || !selectedPeer) return
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        peerId: 'self',
+        content: message,
+        timestamp: Date.now(),
+      },
+      {
+        id: Math.random().toString(),
+        peerId: selectedPeer,
+        content: 'Echo: ' + message,
+        timestamp: Date.now(),
+      },
+    ])
+    setMessage('')
+  }, [message, selectedPeer])
 
   const bg = dark ? '#0d1117' : '#f5f7fa'
   const fg = dark ? '#e6edf3' : '#1a1a2e'
@@ -16,51 +48,100 @@ export default function VerifyScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={styles.container}>
-      <Text style={[styles.heading, { color: fg }]}>Verify Identity</Text>
-      <Text style={[styles.subheading, { color: sub }]}>P2P · no data stored on servers</Text>
+      <Text style={[styles.heading, { color: fg }]}>P2P Messaging</Text>
+      <Text style={[styles.subheading, { color: sub }]}>Test peer-to-peer communication</Text>
 
-      <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
-        <Text style={[styles.cardTitle, { color: fg }]}>Coming Soon</Text>
-        <Text style={[styles.desc, { color: sub }]}>
-          Identity verification functionality will be added here.
-        </Text>
-      </View>
+      {pear.peers.length === 0 ? (
+        <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
+          <Text style={[styles.cardTitle, { color: fg }]}>No Peers Connected</Text>
+          <Text style={[styles.desc, { color: sub }]}>
+            Connect to the P2P network from the home screen to send messages.
+          </Text>
+        </View>
+      ) : (
+        <>
+          <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
+            <Text style={[styles.label, { color: sub }]}>Select Peer</Text>
+            {pear.peers.map((peer) => (
+              <TouchableOpacity
+                key={peer.peerId}
+                style={[
+                  styles.peerButton,
+                  { borderColor: border, backgroundColor: selectedPeer === peer.peerId ? '#0a7ea4' : inputBg },
+                ]}
+                onPress={() => setSelectedPeer(peer.peerId)}>
+                <Text
+                  style={[
+                    styles.peerButtonText,
+                    { color: selectedPeer === peer.peerId ? '#fff' : fg },
+                  ]}>
+                  {peer.peerId}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
+            <Text style={[styles.label, { color: sub }]}>Messages</Text>
+            <FlatList
+              data={messages}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <View style={[styles.message, { backgroundColor: item.peerId === 'self' ? '#0a7ea410' : '#22222210' }]}>
+                  <Text style={[styles.messagePeer, { color: sub }]}>
+                    {item.peerId === 'self' ? 'You' : item.peerId}
+                  </Text>
+                  <Text style={[styles.messageContent, { color: fg }]}>{item.content}</Text>
+                </View>
+              )}
+              ListEmptyComponent={
+                <Text style={[styles.emptyText, { color: sub }]}>No messages yet</Text>
+              }
+            />
+          </View>
+
+          {selectedPeer && (
+            <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
+              <Text style={[styles.label, { color: sub }]}>Send Message</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: bg, borderColor: border, color: fg }]}
+                value={message}
+                onChangeText={setMessage}
+                placeholder="Type a message…"
+                placeholderTextColor={sub}
+                multiline
+              />
+              <TouchableOpacity style={styles.btnPrimary} onPress={handleSendMessage}>
+                <Text style={styles.btnText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
+      )}
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
   container: { padding: 20, paddingTop: 60, paddingBottom: 40 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   heading: { fontSize: 28, fontWeight: '800', marginBottom: 4 },
   subheading: { fontSize: 13, marginBottom: 28 },
 
-  card: { borderRadius: 16, padding: 20, borderWidth: 1, marginBottom: 16 },
-  cardTitle: { fontSize: 18, fontWeight: '700', marginBottom: 10 },
-  desc: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  card: { borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 16 },
+  cardTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  desc: { fontSize: 14, lineHeight: 20 },
+  label: { fontSize: 12, fontWeight: '600', letterSpacing: 0.5, marginBottom: 10 },
 
-  input: { borderWidth: 1, borderRadius: 10, padding: 14, fontSize: 14, marginBottom: 6, minHeight: 70 },
-  charCount: { fontSize: 11, marginBottom: 14 },
+  peerButton: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 8 },
+  peerButtonText: { fontSize: 14, fontWeight: '500' },
 
-  btnPrimary: { backgroundColor: '#0a7ea4', borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 12 },
-  btnDisabled: { opacity: 0.4 },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  btnSecondary: { borderWidth: 1, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8 },
-  btnSecondaryText: { fontWeight: '600', fontSize: 15 },
+  message: { borderRadius: 8, padding: 12, marginBottom: 8 },
+  messagePeer: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
+  messageContent: { fontSize: 13 },
+  emptyText: { textAlign: 'center', fontSize: 13, paddingVertical: 20 },
 
-  resultBanner: {
-    borderRadius: 16, padding: 20, marginBottom: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 16,
-  },
-  resultIcon: { fontSize: 36, color: '#fff' },
-  resultTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 2 },
-  resultSub: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
-
-  idCard: { borderRadius: 16, padding: 20, borderWidth: 1, marginBottom: 16 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
-  rowLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.5, flex: 1 },
-  rowValue: { fontSize: 14, fontWeight: '600', flex: 2, textAlign: 'right' },
-  divider: { height: 1, marginVertical: 12 },
-  pubKeyLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, marginBottom: 6 },
-  pubKey: { fontSize: 11, fontFamily: 'monospace', lineHeight: 18 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14, marginBottom: 12, minHeight: 60 },
+  btnPrimary: { backgroundColor: '#0a7ea4', borderRadius: 8, padding: 12, alignItems: 'center' },
+  btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 })
