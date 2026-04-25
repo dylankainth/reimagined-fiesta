@@ -6,7 +6,10 @@ import Protomux from 'protomux'
 import c from 'compact-encoding'
 import b4a from 'b4a'
 import { createHash } from 'crypto'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
+import { EventEmitter } from 'events'
+import fs from 'fs'
+import path from 'path'
 import Table from 'cli-table3'
 import {
   MSG, JOB_STATUS, HEARTBEAT_INTERVAL, PAYMENT_INTERVAL,
@@ -65,6 +68,15 @@ const jobCore = store.get({ name: 'job-log' })
 const bee     = new Hyperbee(jobCore, { keyEncoding: 'utf-8', valueEncoding: 'json' })
 await bee.ready()
 log(`Hyperbee ready  logKey=${b4a.toString(jobCore.key, 'hex').slice(0, 16)}…`)
+
+// ─── Sandbox detection ────────────────────────────────────────────────────────
+try {
+  execSync('which nsjail', { stdio: 'ignore', timeout: 5000 })
+  nsjailAvailable = true
+  log('nsjail found — jobs will run in isolated containers')
+} catch {
+  log('⚠  nsjail not found — running without sandbox (dev mode)')
+}
 
 // ─── Load persisted stats ─────────────────────────────────────────────────────
 const statsEntry = await bee.get('provider:stats')
@@ -318,11 +330,66 @@ function pythonCodeFor(type) {
   }
 }
 
+// ─── Sandboxed job runner ─────────────────────────────────────────────────────
+let nsjailAvailable = false
+function runInSandbox(jobId, jobType) {
+  const script = pythonCodeFor(jobType)
+
+  if (!nsjailAvailable) {
+    // Fallback: run without sandbox (dev mode)
+    return spawn('python3', ['-c', script], { stdio: ['ignore', 'pipe', 'pipe'] })
+  }
+
+  // Use nsjail for isolation
+  const tmpDir = `/tmp/harvest-${jobId}`
+  const inputDir = `${tmpDir}/input`
+  const outputDir = `${tmpDir}/output`
+
+  try {
+    fs.mkdirSync(inputDir, { recursive: true })
+    fs.mkdirSync(outputDir, { recursive: true })
+    fs.writeFileSync(`${inputDir}/job.py`, script)
+  } catch (err) {
+    // Return a failed process-like object
+    const failProc = new EventEmitter()
+    process.nextTick(() => failProc.emit('error', err))
+    return failProc
+  }
+
+  const proc = spawn('nsjail', [
+    '--mode', 'o',
+    '--time_limit', '120',
+    '--max_cpus', '2',
+    '--rlimit_as', '4096',
+    '--disable_proc',
+    '--iface_no_lo',
+    '--bindmount', `${inputDir}:/input:ro`,
+    '--bindmount', `${outputDir}:/output:rw`,
+    '--cwd', '/input',
+    '--',
+    'python3', '/input/job.py'
+  ], { stdio: ['ignore', 'pipe', 'pipe'] })
+
+  // Wrap the nsjail process to clean up temp files on exit
+  const originalOn = proc.on.bind(proc)
+  proc.on = function(event, listener) {
+    if (event === 'close') {
+      return originalOn(event, (code) => {
+        try { fs.rmSync(tmpDir, { recursive: true }) } catch {}
+        listener(code)
+      })
+    }
+    return originalOn(event, listener)
+  }
+
+  return proc
+}
+
 // ─── Job runner ───────────────────────────────────────────────────────────────
 function runJob(job) {
   const { jobId, peer, type } = job
 
-  const proc = spawn('python3', ['-c', pythonCodeFor(type)], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const proc = runInSandbox(jobId, type)
   job.proc = proc
 
   // ── Heartbeat loop ────────────────────────────────────────────────────────
