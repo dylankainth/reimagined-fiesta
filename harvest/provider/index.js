@@ -30,6 +30,16 @@ const SUPPORTED_JOB_TYPES = {
   'compression':  { description: 'File compression', multiplier: 0.6 },
 }
 
+// ─── CLI args ─────────────────────────────────────────────────────────────────
+{
+  const args = process.argv.slice(2)
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--storage' && args[i + 1]) { process.env.PROVIDER_STORAGE = args[++i] }
+    if (args[i] === '--cores'   && args[i + 1]) { CFG.cores   = Number(args[++i]) }
+    if (args[i] === '--price'   && args[i + 1]) { CFG.pricePerCorePerMin = Number(args[++i]) }
+  }
+}
+
 // ─── Pear runtime helpers ─────────────────────────────────────────────────────
 const pearConfig = globalThis.Pear?.config
 const teardown   = (fn) => globalThis.Pear ? globalThis.Pear.teardown(fn) : process.on('exit', fn)
@@ -49,7 +59,7 @@ function log(line) {
 }
 
 // ─── Storage + Hypercore job log ──────────────────────────────────────────────
-const storagePath = pearConfig?.storage ?? './provider-storage'
+const storagePath = pearConfig?.storage ?? process.env.PROVIDER_STORAGE ?? './provider-storage'
 const store   = new Corestore(storagePath)
 const jobCore = store.get({ name: 'job-log' })
 const bee     = new Hyperbee(jobCore, { keyEncoding: 'utf-8', valueEncoding: 'json' })

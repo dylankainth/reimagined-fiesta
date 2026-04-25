@@ -6,39 +6,57 @@ import c from 'compact-encoding'
 import b4a from 'b4a'
 import { createHash, randomBytes } from 'crypto'
 import {
-  MSG, JOB_STATUS, HEARTBEAT_INTERVAL, PAYMENT_INTERVAL,
+  MSG, JOB_STATUS, PAYMENT_INTERVAL,
   HARVEST_TOPIC, makeMsg, encode, decode
 } from '@harvest/shared'
 
-// ─── Default job to submit ────────────────────────────────────────────────────
-const MY_JOB = {
-  jobId:             randomBytes(16).toString('hex'),
-  description:       'Train neural net on MNIST',
-  jobType:           'ml-training',
-  cores:             2,
-  ramGB:             4,
-  estimatedMinutes:  1,
-  maxBudgetUSDT:     0.05,
+// ─── CLI args ─────────────────────────────────────────────────────────────────
+function parseArgs() {
+  const args = process.argv.slice(2)
+  const out  = {}
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith('--') && args[i + 1] !== undefined) {
+      out[args[i].slice(2)] = args[i + 1]
+      i++
+    }
+  }
+  return out
+}
+const argv = parseArgs()
+
+// ─── Job config (CLI args override defaults) ──────────────────────────────────
+const JOB = {
+  jobId:            randomBytes(16).toString('hex'),
+  description:      argv.description ?? 'Train neural net on MNIST',
+  jobType:          argv.type        ?? 'ml-training',
+  cores:            Number(argv.cores)   || 2,
+  ramGB:            Number(argv.ram)     || 4,
+  estimatedMinutes: Number(argv.minutes) || 1,
+  maxBudgetUSDT:    Number(argv.budget)  || 0.05,
 }
 
-// ─── Pear runtime helpers (Pear is an injected global in the Pear runtime) ────
-const pearConfig  = globalThis.Pear?.config
-const teardown    = (fn) => globalThis.Pear ? globalThis.Pear.teardown(fn) : process.on('exit', fn)
+// ─── Pear runtime helpers ─────────────────────────────────────────────────────
+const pearConfig = globalThis.Pear?.config
+const teardown   = (fn) => globalThis.Pear ? globalThis.Pear.teardown(fn) : process.on('exit', fn)
 
 // ─── Timing constants ─────────────────────────────────────────────────────────
 const WATCHDOG_TIMEOUT = 2.5 * PAYMENT_INTERVAL
 
 // ─── Runtime state ────────────────────────────────────────────────────────────
-const providers   = new Map()  // peerId → { send, advertise, conn }
-const logLines    = []
-let   currentJob  = null       // the one active job we track
-let   jobStatus   = JOB_STATUS.PENDING
-let   totalPaid   = 0
-let   tickIndex   = 0
-let   payTimer    = null
-let   watchdogTimer = null
+const providers  = new Map()  // peerId → { send, conn, advertise }
+const logLines   = []
+let   currentJob = null       // { ...JOB, peerId, providerId, acceptedAt, logPublicKey, score, rep, failedPeers }
+let   jobStatus  = JOB_STATUS.PENDING
+let   totalPaid  = 0
+let   tickIndex  = 0
+let   payTimer   = null
+let   watchdogTimer  = null
+let   failoverTimer  = null
 let   lastHeartbeatAt = null
-let   epochLines  = []         // live progress output
+let   heartbeatCount  = 0
+let   progressCurrent = 0
+let   progressTotal   = 30
+let   lastProgressLine = null
 
 function log(line) {
   const ts = new Date().toISOString().slice(11, 23)
@@ -53,24 +71,102 @@ await store.ready()
 log('Corestore ready')
 
 // ─── Hyperswarm DHT ───────────────────────────────────────────────────────────
-const swarm      = new Hyperswarm()
-const SELF_ID    = b4a.toString(swarm.keyPair.publicKey, 'hex').slice(0, 16)
-const topicBuf   = createHash('sha256').update(HARVEST_TOPIC).digest()
+const swarm    = new Hyperswarm()
+const SELF_ID  = b4a.toString(swarm.keyPair.publicKey, 'hex').slice(0, 16)
+const topicBuf = createHash('sha256').update(HARVEST_TOPIC).digest()
 
-// ─── Connection handler — registered BEFORE join so we never miss an event ────
+// ─── Provider scoring ─────────────────────────────────────────────────────────
+function scoreProvider(adv) {
+  if (!adv) return -1
+  if (adv.activeJobs >= adv.maxJobs) return -1
+  if (adv.cores < JOB.cores || adv.ramGB < JOB.ramGB) return -1
+  const estCost = (JOB.cores * adv.pricePerCorePerMin + JOB.ramGB * adv.pricePerGBPerMin)
+                * JOB.estimatedMinutes
+  if (estCost > JOB.maxBudgetUSDT) return -1
+  const reputation = adv.completedJobs || 0
+  const available  = adv.maxJobs - adv.activeJobs
+  return (1 / adv.pricePerCorePerMin) * (1 + reputation * 0.1) * available
+}
+
+// ─── Find best provider and submit job ────────────────────────────────────────
+function findAndSubmitJob() {
+  clearTimeout(failoverTimer)
+  failoverTimer = null
+
+  // Don't re-enter if already dispatched or finished
+  if (jobStatus === JOB_STATUS.COMPLETE   ||
+      jobStatus === JOB_STATUS.CANCELLED  ||
+      jobStatus === JOB_STATUS.MATCHED    ||
+      jobStatus === JOB_STATUS.RUNNING) return
+
+  const failedPeers = currentJob?.failedPeers ?? new Set()
+
+  // Score all eligible providers
+  let bestPeerId = null
+  let bestScore  = -Infinity
+  for (const [peerId, p] of providers) {
+    if (!p.advertise) continue
+    if (failedPeers.has(peerId)) continue
+    const score = scoreProvider(p.advertise)
+    if (score > bestScore) {
+      bestScore  = score
+      bestPeerId = peerId
+    }
+  }
+
+  if (bestPeerId === null) {
+    log('⚠  No providers available — waiting for new peers...')
+    failoverTimer = setTimeout(() => {
+      if (jobStatus === JOB_STATUS.PENDING) findAndSubmitJob()
+    }, 10_000)
+    return
+  }
+
+  const p   = providers.get(bestPeerId)
+  const adv = p.advertise
+
+  // Reset per-run progress tracking
+  progressCurrent  = 0
+  progressTotal    = 30
+  lastProgressLine = null
+  lastHeartbeatAt  = null
+  heartbeatCount   = 0
+
+  jobStatus  = JOB_STATUS.MATCHED
+  currentJob = {
+    ...JOB,
+    peerId:      bestPeerId,
+    providerId:  adv.providerId,
+    score:       bestScore,
+    rep:         adv.completedJobs || 0,
+    failedPeers,
+  }
+
+  log(`Submitting job ${JOB.jobId.slice(0, 8)} to ${adv.providerId} ` +
+      `(score: ${bestScore.toFixed(1)}, rep: ${adv.completedJobs || 0} jobs)`)
+  p.send(makeMsg(MSG.JOB_REQUEST, JOB))
+}
+
+// ─── Connection handler ───────────────────────────────────────────────────────
 swarm.on('connection', (conn) => {
   const peerId = b4a.toString(conn.remotePublicKey, 'hex').slice(0, 16)
   log(`Connected to peer: ${peerId}`)
 
-  const mux = new Protomux(conn)
+  const mux     = new Protomux(conn)
   const channel = mux.createChannel({
     protocol: 'harvest-compute-v1',
     onclose() {
       providers.delete(peerId)
       log(`Peer dropped: ${peerId}`)
-      if (currentJob && currentJob.peerId === peerId && jobStatus === JOB_STATUS.RUNNING) {
-        log('⚠  Provider disconnected mid-job — stopping payments')
+
+      if (currentJob?.peerId === peerId &&
+          (jobStatus === JOB_STATUS.RUNNING || jobStatus === JOB_STATUS.MATCHED)) {
+        log(`⚠  Provider ${peerId} disconnected — seeking failover...`)
         stopPaymentStream()
+        stopWatchdog()
+        currentJob.failedPeers.add(peerId)
+        jobStatus  = JOB_STATUS.PENDING
+        findAndSubmitJob()
       }
     },
   })
@@ -86,16 +182,14 @@ swarm.on('connection', (conn) => {
 
   channel.open()
 
-  const send = (data) => {
-    try { msg.send(encode(data)) } catch {}
-  }
-
+  const send = (data) => { try { msg.send(encode(data)) } catch {} }
   providers.set(peerId, { send, conn, advertise: null })
 })
 
 swarm.join(topicBuf, { server: false, client: true })
 await swarm.flush()
 log(`Requester ID: ${SELF_ID}`)
+log(`Job type: ${JOB.jobType}  cores: ${JOB.cores}  RAM: ${JOB.ramGB}GB  budget: $${JOB.maxBudgetUSDT}`)
 log(`Scanning DHT topic=${b4a.toString(topicBuf, 'hex').slice(0, 16)}…`)
 
 // ─── Message router ───────────────────────────────────────────────────────────
@@ -108,48 +202,24 @@ async function handleMessage(data, peerId) {
     case MSG.JOB_PROGRESS: return handleProgress(data)
     case MSG.JOB_COMPLETE: return handleJobComplete(data)
     case MSG.JOB_FAILED:   return handleJobFailed(data)
-    default:
-      log(`Unknown msg: ${data.type}`)
+    default:               log(`Unknown msg: ${data.type}`)
   }
 }
 
-// ─── ADVERTISE handler — pick cheapest and submit job ─────────────────────────
+// ─── ADVERTISE ───────────────────────────────────────────────────────────────
 function handleAdvertise(data, peerId) {
   const provider = providers.get(peerId)
   if (!provider) return
-
   provider.advertise = data
+
   log(`ADVERTISE from ${data.providerId} cores=${data.cores} ram=${data.ramGB}GB ` +
-      `price=${data.pricePerCorePerMin}/core/min active=${data.activeJobs}/${data.maxJobs}`)
+      `$${data.pricePerCorePerMin}/core/min rep=${data.completedJobs ?? 0} ` +
+      `active=${data.activeJobs}/${data.maxJobs}`)
 
-  // Only submit once
-  if (jobStatus !== JOB_STATUS.PENDING) return
-
-  // Check if this provider can handle our job
-  if (data.activeJobs >= data.maxJobs) {
-    log(`${data.providerId} is full — waiting`)
-    return
-  }
-  if (data.cores < MY_JOB.cores || data.ramGB < MY_JOB.ramGB) {
-    log(`${data.providerId} insufficient resources`)
-    return
-  }
-
-  const estCost = (MY_JOB.cores * data.pricePerCorePerMin + MY_JOB.ramGB * data.pricePerGBPerMin)
-                * MY_JOB.estimatedMinutes
-  if (estCost > MY_JOB.maxBudgetUSDT) {
-    log(`${data.providerId} too expensive: est $${estCost.toFixed(5)} > budget $${MY_JOB.maxBudgetUSDT}`)
-    return
-  }
-
-  // Pick this provider — submit job
-  jobStatus = JOB_STATUS.MATCHED
-  currentJob = { ...MY_JOB, peerId, providerId: data.providerId }
-  log(`Submitting job ${MY_JOB.jobId.slice(0, 8)} to ${data.providerId}`)
-  provider.send(makeMsg(MSG.JOB_REQUEST, MY_JOB))
+  if (jobStatus === JOB_STATUS.PENDING) findAndSubmitJob()
 }
 
-// ─── JOB_ACCEPT ───────────────────────────────────────────────────────────────
+// ─── JOB_ACCEPT ──────────────────────────────────────────────────────────────
 function handleJobAccept(data, peerId) {
   const { jobId, estimatedCost, logPublicKey } = data
   if (!currentJob || currentJob.jobId !== jobId) return
@@ -164,43 +234,43 @@ function handleJobAccept(data, peerId) {
   startWatchdog()
 }
 
-// ─── JOB_REJECT ───────────────────────────────────────────────────────────────
+// ─── JOB_REJECT ──────────────────────────────────────────────────────────────
 function handleJobReject(data, peerId) {
   const { jobId, reason } = data
   if (!currentJob || currentJob.jobId !== jobId) return
 
-  log(`JOB_REJECT: ${reason} — resetting to PENDING`)
-  jobStatus  = JOB_STATUS.PENDING
-  currentJob = null
-  // Will re-submit when another ADVERTISE arrives
+  log(`JOB_REJECT from ${peerId}: ${reason}`)
+  currentJob.failedPeers.add(peerId)
+  jobStatus = JOB_STATUS.PENDING
+  findAndSubmitJob()
 }
 
-// ─── HEARTBEAT ────────────────────────────────────────────────────────────────
+// ─── HEARTBEAT ───────────────────────────────────────────────────────────────
 function handleHeartbeat(data, peerId) {
   const { seq, cpuPct, memPct, jobId } = data
   if (!currentJob || currentJob.jobId !== jobId) return
-
   lastHeartbeatAt = Date.now()
+  heartbeatCount  = seq
   log(`HB #${seq} cpu=${cpuPct}% mem=${memPct}%`)
   resetWatchdog()
 }
 
-// ─── JOB_PROGRESS ─────────────────────────────────────────────────────────────
+// ─── JOB_PROGRESS ────────────────────────────────────────────────────────────
 function handleProgress(data) {
   const { jobId, data: prog } = data
   if (!currentJob || currentJob.jobId !== jobId) return
 
-  if (prog.epoch !== undefined) {
-    const bar = progressBar(prog.epoch, prog.total ?? 30)
-    const line = `Epoch ${String(prog.epoch).padStart(2)}/${prog.total ?? 30}  ${bar}  loss=${prog.loss.toFixed(4)}  acc=${(prog.accuracy * 100).toFixed(2)}%`
-    epochLines.push(line)
-    if (epochLines.length > 12) epochLines.shift()
-  } else if (prog.status === 'done') {
-    epochLines.push(`✓  Training complete — final accuracy: ${(prog.final_accuracy * 100).toFixed(2)}%`)
+  lastProgressLine = JSON.stringify(prog)
+
+  // Generic: pick whichever step counter this job type uses
+  const step = prog.epoch ?? prog.frame ?? prog.batch ?? prog.chunk
+  if (step !== undefined) {
+    progressCurrent = step
+    progressTotal   = prog.total ?? 30
   }
 }
 
-// ─── JOB_COMPLETE ─────────────────────────────────────────────────────────────
+// ─── JOB_COMPLETE ────────────────────────────────────────────────────────────
 function handleJobComplete(data) {
   const { jobId, totalCost, logPublicKey } = data
   if (!currentJob || currentJob.jobId !== jobId) return
@@ -210,10 +280,8 @@ function handleJobComplete(data) {
   stopWatchdog()
 
   log(`JOB_COMPLETE totalCost=$${totalCost.toFixed(6)} totalPaid=$${totalPaid.toFixed(6)}`)
-  log(`Verify proof-of-work at logKey=${logPublicKey}`)
 
-  // Print final summary
-  console.log('\n')
+  console.clear()
   console.log('╔════════════════════════════════════════════════╗')
   console.log('║             JOB COMPLETED                      ║')
   console.log('╚════════════════════════════════════════════════╝')
@@ -221,32 +289,47 @@ function handleJobComplete(data) {
   console.log(`  Total cost  : $${totalCost.toFixed(6)} USDT`)
   console.log(`  Total paid  : $${totalPaid.toFixed(6)} USDT`)
   console.log(`  Log key     : ${logPublicKey}`)
-  console.log('  (Use this key to independently verify execution on the Hypercore log)')
+  console.log('  (Verify execution on the Hypercore tamper-evident log)')
   console.log('')
 }
 
-// ─── JOB_FAILED ───────────────────────────────────────────────────────────────
+// ─── JOB_FAILED ──────────────────────────────────────────────────────────────
 function handleJobFailed(data) {
   const { jobId, reason } = data
   if (!currentJob || currentJob.jobId !== jobId) return
 
-  jobStatus = JOB_STATUS.FAILED
+  log(`JOB_FAILED: ${reason} — attempting failover`)
   stopPaymentStream()
   stopWatchdog()
-  log(`JOB_FAILED: ${reason}`)
+  currentJob.failedPeers.add(currentJob.peerId)
+  jobStatus = JOB_STATUS.PENDING
+  findAndSubmitJob()
 }
 
 // ─── Payment stream ───────────────────────────────────────────────────────────
 function startPaymentStream(peerId) {
   payTimer = setInterval(() => {
+    if (jobStatus !== JOB_STATUS.RUNNING) return
     const provider = providers.get(peerId)
-    if (!provider || jobStatus !== JOB_STATUS.RUNNING) return
+    if (!provider) return
 
-    const elapsedMin = (Date.now() - currentJob.acceptedAt) / 60_000
-    const tickAmount = (MY_JOB.cores * 0.001 + MY_JOB.ramGB * 0.0005) *
-                       (PAYMENT_INTERVAL / 60_000)
-    totalPaid  += tickAmount
-    tickIndex  += 1
+    const tickAmount = (JOB.cores * 0.001 + JOB.ramGB * 0.0005) * (PAYMENT_INTERVAL / 60_000)
+    totalPaid += tickAmount
+    tickIndex += 1
+
+    // Budget exhaustion checks
+    const remaining = JOB.maxBudgetUSDT - totalPaid
+    if (remaining < JOB.maxBudgetUSDT * 0.1) {
+      log(`⚠  Approaching budget limit ($${remaining.toFixed(6)} remaining)`)
+    }
+    if (totalPaid >= JOB.maxBudgetUSDT) {
+      log('Budget exhausted — job cancelled')
+      provider.send(makeMsg(MSG.CANCEL_JOB, { jobId: currentJob.jobId }))
+      jobStatus = JOB_STATUS.CANCELLED
+      stopPaymentStream()
+      stopWatchdog()
+      return
+    }
 
     provider.send(makeMsg(MSG.PAYMENT_TICK, {
       jobId:    currentJob.jobId,
@@ -263,25 +346,26 @@ function stopPaymentStream() {
   payTimer = null
 }
 
-// ─── Heartbeat watchdog ───────────────────────────────────────────────────────
-// If no heartbeat in 2.5 × PAYMENT_INTERVAL → warn and pause payments
+// ─── Watchdog ─────────────────────────────────────────────────────────────────
 function startWatchdog() {
   lastHeartbeatAt = Date.now()
   watchdogTimer   = setInterval(() => {
-    if (!lastHeartbeatAt) return
+    if (!lastHeartbeatAt || jobStatus !== JOB_STATUS.RUNNING) return
     const silence = Date.now() - lastHeartbeatAt
-    if (silence > WATCHDOG_TIMEOUT && jobStatus === JOB_STATUS.RUNNING) {
-      log(`⚠  WATCHDOG: no heartbeat for ${(silence / 1000).toFixed(0)}s — pausing payments!`)
+    if (silence > WATCHDOG_TIMEOUT) {
+      log(`⚠  WATCHDOG: no heartbeat for ${(silence / 1000).toFixed(0)}s — failing over`)
       stopPaymentStream()
-      jobStatus = JOB_STATUS.FAILED  // treat as failed
+      stopWatchdog()
+      currentJob.failedPeers.add(currentJob.peerId)
+      jobStatus = JOB_STATUS.PENDING
+      findAndSubmitJob()
     }
   }, 1_000)
 }
 
 function resetWatchdog() {
   lastHeartbeatAt = Date.now()
-  // If payments were paused and provider came back, resume
-  if (!payTimer && jobStatus === JOB_STATUS.RUNNING && currentJob) {
+  if (!payTimer && jobStatus === JOB_STATUS.RUNNING && currentJob?.peerId) {
     log('Heartbeat resumed — restarting payment stream')
     startPaymentStream(currentJob.peerId)
   }
@@ -293,13 +377,13 @@ function stopWatchdog() {
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
-function progressBar(current, total, width = 20) {
-  const filled = Math.round((current / total) * width)
-  return '[' + '█'.repeat(filled) + '░'.repeat(width - filled) + ']'
+function progressBar(current, total, width = 16) {
+  const filled = total > 0 ? Math.min(width, Math.round((current / total) * width)) : 0
+  return '█'.repeat(filled) + '░'.repeat(width - filled)
 }
 
 function statusBadge(s) {
-  const badges = {
+  const map = {
     [JOB_STATUS.PENDING]:   '○ pending',
     [JOB_STATUS.MATCHED]:   '◎ matched',
     [JOB_STATUS.RUNNING]:   '● running',
@@ -307,66 +391,80 @@ function statusBadge(s) {
     [JOB_STATUS.FAILED]:    '✗ failed',
     [JOB_STATUS.CANCELLED]: '⊘ cancelled',
   }
-  return badges[s] ?? s
+  return map[s] ?? s
 }
 
-// ─── Terminal UI ──────────────────────────────────────────────────────────────
+function fmtSince(ts) {
+  if (!ts) return 'none'
+  return `${Math.round((Date.now() - ts) / 1000)}s ago`
+}
+
+// ─── Terminal UI (2s refresh) ─────────────────────────────────────────────────
 function renderUI() {
+  if (jobStatus === JOB_STATUS.COMPLETE || jobStatus === JOB_STATUS.CANCELLED) return
+
   console.clear()
-  console.log('╔════════════════════════════════════════════════╗')
-  console.log('║          HARVEST  —  REQUESTER  NODE           ║')
-  console.log('╚════════════════════════════════════════════════╝')
+  console.log('╔══════════════════════════════════════════════════╗')
+  console.log('║          HARVEST  —  REQUESTER  NODE             ║')
+  console.log('╚══════════════════════════════════════════════════╝')
   console.log(`  Requester ID : ${SELF_ID}`)
-  console.log(`  Providers    : ${providers.size} discovered`)
+  console.log(`  Providers    : ${providers.size} available`)
+  console.log(`  Budget       : $${JOB.maxBudgetUSDT.toFixed(4)} USDT`)
   console.log('')
 
-  if (currentJob) {
-    const elapsed = currentJob.acceptedAt
-      ? ((Date.now() - currentJob.acceptedAt) / 1000).toFixed(1)
-      : '—'
-    console.log('┌─ Active Job ─────────────────────────────────┐')
-    console.log(`│  ID          : ${currentJob.jobId.slice(0, 16)}…`)
-    console.log(`│  Description : ${currentJob.description}`)
-    console.log(`│  Provider    : ${currentJob.providerId ?? '—'}`)
-    console.log(`│  Status      : ${statusBadge(jobStatus)}`)
-    console.log(`│  Elapsed     : ${elapsed}s`)
-    console.log(`│  Paid        : $${totalPaid.toFixed(6)} USDT  (tick #${tickIndex})`)
-    if (currentJob.logPublicKey) {
-      console.log(`│  Log key     : ${currentJob.logPublicKey.slice(0, 32)}…`)
+  // ── Active job panel ──────────────────────────────────────────────────────
+  console.log('─── Active Job ─────────────────────────────────────')
+  if (currentJob?.peerId) {
+    const bar = progressBar(progressCurrent, progressTotal)
+    const remaining = JOB.maxBudgetUSDT - totalPaid
+    console.log(`  Job ID    : ${JOB.jobId.slice(0, 16)}…`)
+    console.log(`  Provider  : ${currentJob.providerId} (score: ${currentJob.score?.toFixed(1) ?? '?'}, rep: ${currentJob.rep ?? 0} jobs)`)
+    console.log(`  Status    : ${statusBadge(jobStatus)}`)
+    console.log(`  Heartbeat : ${heartbeatCount} received  (last: ${fmtSince(lastHeartbeatAt)})`)
+    console.log(`  Spent     : $${totalPaid.toFixed(6)} / $${JOB.maxBudgetUSDT.toFixed(4)} USDT`)
+    console.log(`  Progress  : ${bar}  ${progressCurrent}/${progressTotal}`)
+    if (lastProgressLine) {
+      console.log(`  Last data : ${lastProgressLine.slice(0, 64)}`)
     }
-    console.log('└──────────────────────────────────────────────┘')
-    console.log('')
   } else {
-    const job = MY_JOB
-    console.log('┌─ Pending Job ────────────────────────────────┐')
-    console.log(`│  ID          : ${job.jobId.slice(0, 16)}…`)
-    console.log(`│  Description : ${job.description}`)
-    console.log(`│  Resources   : ${job.cores} cores · ${job.ramGB} GB RAM`)
-    console.log(`│  Budget      : $${job.maxBudgetUSDT} USDT  (${job.estimatedMinutes} min est.)`)
-    console.log(`│  Status      : ${statusBadge(jobStatus)}`)
-    console.log('└──────────────────────────────────────────────┘')
-    console.log('')
+    console.log(`  Job ID    : ${JOB.jobId.slice(0, 16)}…`)
+    console.log(`  Status    : ${statusBadge(jobStatus)}`)
+    console.log(`  Type      : ${JOB.jobType}  ${JOB.cores} cores · ${JOB.ramGB} GB RAM`)
+    console.log(`  Budget    : $${JOB.maxBudgetUSDT.toFixed(4)} USDT`)
   }
+  console.log('')
 
-  if (epochLines.length > 0) {
-    console.log('─── Training output ─────────────────────────────')
-    for (const line of epochLines) {
-      console.log(`  ${line}`)
-    }
-    console.log('')
-  }
-
-  console.log('─── Log ─────────────────────────────────────────')
-  for (const line of logLines.slice(-10)) {
+  // ── Last 5 log lines ──────────────────────────────────────────────────────
+  console.log('─── Last 5 log lines ───────────────────────────────')
+  for (const line of logLines.slice(-5)) {
     console.log(`  ${line}`)
+  }
+  console.log('')
+
+  // ── Provider market ───────────────────────────────────────────────────────
+  console.log('─── Provider Market ────────────────────────────────')
+  const sorted = [...providers.entries()]
+    .filter(([, p]) => p.advertise)
+    .map(([peerId, p]) => ({ peerId, score: scoreProvider(p.advertise), ...p.advertise }))
+    .sort((a, b) => b.score - a.score)
+
+  if (sorted.length === 0) {
+    console.log('  (scanning for providers…)')
+  }
+  for (let i = 0; i < sorted.length; i++) {
+    const p      = sorted[i]
+    const active = currentJob?.peerId === p.peerId ? '  ← active' : ''
+    const score  = p.score >= 0 ? `score:${p.score.toFixed(1)}` : 'unavailable'
+    console.log(`  ${i + 1}. ${p.peerId}  ${p.cores} cores  $${p.pricePerCorePerMin}/min  rep:${p.completedJobs ?? 0}  ${score}${active}`)
   }
 }
 
-setInterval(renderUI, 3_000)
+setInterval(renderUI, 2_000)
 renderUI()
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 teardown(async () => {
+  clearTimeout(failoverTimer)
   stopPaymentStream()
   stopWatchdog()
   await swarm.destroy()
