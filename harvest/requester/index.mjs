@@ -43,9 +43,10 @@ const teardown   = (fn) => globalThis.Pear ? globalThis.Pear.teardown(fn) : proc
 const WATCHDOG_TIMEOUT = 2.5 * PAYMENT_INTERVAL
 
 // ─── Runtime state ────────────────────────────────────────────────────────────
-const providers  = new Map()  // peerId → { send, conn, advertise }
-const logLines   = []
-let   currentJob = null       // { ...JOB, peerId, providerId, acceptedAt, logPublicKey, score, rep, failedPeers }
+const providers      = new Map()  // peerId → { send, conn, advertise }
+const logLines       = []
+let   currentJob     = null       // { ...JOB, peerId, providerId, acceptedAt, logPublicKey, score, rep, failedPeers }
+let   activeJobConfig = { ...JOB } // preserved across reconnect/failover cycles
 let   jobStatus  = JOB_STATUS.PENDING
 let   totalPaid  = 0
 let   tickIndex  = 0
@@ -140,7 +141,7 @@ function findAndSubmitJob() {
 
   jobStatus  = JOB_STATUS.MATCHED
   currentJob = {
-    ...JOB,
+    ...activeJobConfig,
     peerId:      bestPeerId,
     providerId:  adv.providerId,
     score:       bestScore,
@@ -148,9 +149,9 @@ function findAndSubmitJob() {
     failedPeers,
   }
 
-  log(`Submitting job ${JOB.jobId.slice(0, 8)} to ${adv.providerId} ` +
+  log(`Submitting job ${activeJobConfig.jobId.slice(0, 8)} to ${adv.providerId} ` +
       `(score: ${bestScore.toFixed(1)}, rep: ${adv.completedJobs || 0} jobs)`)
-  p.send(makeMsg(MSG.JOB_REQUEST, JOB))
+  p.send(makeMsg(MSG.JOB_REQUEST, activeJobConfig))
 }
 
 // ─── Connection handler ───────────────────────────────────────────────────────

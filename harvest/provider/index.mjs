@@ -59,7 +59,7 @@ function log(line) {
 }
 
 // ─── Storage + Hypercore job log ──────────────────────────────────────────────
-const storagePath = pearConfig?.storage ?? process.env.PROVIDER_STORAGE ?? './provider-storage'
+const storagePath = process.env.PROVIDER_STORAGE ?? pearConfig?.storage ?? './provider-storage'
 const store   = new Corestore(storagePath)
 const jobCore = store.get({ name: 'job-log' })
 const bee     = new Hyperbee(jobCore, { keyEncoding: 'utf-8', valueEncoding: 'json' })
