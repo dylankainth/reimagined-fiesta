@@ -1,39 +1,12 @@
-import React, { useState, useCallback } from 'react'
+import React from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator,
+  View, Text, ScrollView,
+  StyleSheet,
 } from 'react-native'
-import { useBareWorklet } from '@/hooks/use-bare-worklet'
 import { useColorScheme } from '@/hooks/use-color-scheme'
-
-type Phase = 'idle' | 'entering' | 'connecting' | 'connected' | 'done'
 
 export default function VerifyScreen() {
   const dark = useColorScheme() === 'dark'
-  const worklet = useBareWorklet()
-
-  const [topic, setTopic] = useState('')
-  const [phase, setPhase] = useState<Phase>('idle')
-
-  const handleJoin = useCallback(() => {
-    const clean = topic.replace(/\s/g, '')
-    if (clean.length !== 64) return
-    worklet.joinSession(clean)
-    setPhase('connecting')
-  }, [topic, worklet])
-
-  const handleReset = useCallback(() => {
-    worklet.endSession()
-    setPhase('idle')
-    setTopic('')
-  }, [worklet])
-
-  // Derive phase from worklet state
-  const effectivePhase: Phase = worklet.verification
-    ? 'done'
-    : worklet.peerConnected
-      ? 'connected'
-      : phase
 
   const bg = dark ? '#0d1117' : '#f5f7fa'
   const fg = dark ? '#e6edf3' : '#1a1a2e'
@@ -41,127 +14,18 @@ export default function VerifyScreen() {
   const inputBg = dark ? '#161b22' : '#ffffff'
   const border = dark ? '#30363d' : '#d0d7de'
 
-  if (!worklet.ready) {
-    return (
-      <View style={[styles.center, { backgroundColor: bg }]}>
-        <ActivityIndicator color="#0a7ea4" size="large" />
-        <Text style={{ color: sub, fontSize: 14 }}>Starting secure runtime…</Text>
-      </View>
-    )
-  }
-
   return (
     <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={styles.container}>
       <Text style={[styles.heading, { color: fg }]}>Verify Identity</Text>
       <Text style={[styles.subheading, { color: sub }]}>P2P · no data stored on servers</Text>
 
-      {effectivePhase === 'idle' || effectivePhase === 'entering' ? (
-        <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
-          <Text style={[styles.cardTitle, { color: fg }]}>Enter Session Code</Text>
-          <Text style={[styles.desc, { color: sub }]}>
-            Ask the identity holder to open their app and tap "Share Identity via P2P". They'll see a code — enter it below.
-          </Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: bg, borderColor: border, color: fg }]}
-            value={topic}
-            onChangeText={t => {
-              setTopic(t)
-              setPhase(t.length > 0 ? 'entering' : 'idle')
-            }}
-            placeholder="Paste 64-char hex code…"
-            placeholderTextColor={sub}
-            autoCapitalize="none"
-            autoCorrect={false}
-            multiline
-          />
-          <Text style={[styles.charCount, { color: sub }]}>
-            {topic.replace(/\s/g, '').length} / 64 characters
-          </Text>
-          <TouchableOpacity
-            style={[styles.btnPrimary, topic.replace(/\s/g, '').length !== 64 && styles.btnDisabled]}
-            onPress={handleJoin}
-            disabled={topic.replace(/\s/g, '').length !== 64}>
-            <Text style={styles.btnText}>Connect & Verify</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {effectivePhase === 'connecting' && (
-        <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
-          <ActivityIndicator color="#0a7ea4" style={{ marginBottom: 12 }} />
-          <Text style={[styles.cardTitle, { color: fg, textAlign: 'center' }]}>Connecting via P2P…</Text>
-          <Text style={[styles.desc, { color: sub, textAlign: 'center' }]}>
-            Joining DHT swarm. Make sure the holder's app is open and sharing.
-          </Text>
-          <TouchableOpacity style={[styles.btnSecondary, { borderColor: border }]} onPress={handleReset}>
-            <Text style={[styles.btnSecondaryText, { color: fg }]}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {effectivePhase === 'connected' && (
-        <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
-          <ActivityIndicator color="#0a7ea4" style={{ marginBottom: 12 }} />
-          <Text style={[styles.cardTitle, { color: fg, textAlign: 'center' }]}>Peer Connected</Text>
-          <Text style={[styles.desc, { color: sub, textAlign: 'center' }]}>
-            Receiving identity data and verifying signature…
-          </Text>
-        </View>
-      )}
-
-      {effectivePhase === 'done' && worklet.verification && (
-        <>
-          <View style={[
-            styles.resultBanner,
-            { backgroundColor: worklet.verification.valid ? '#1a4731' : '#4a1010' },
-          ]}>
-            <Text style={styles.resultIcon}>{worklet.verification.valid ? '✓' : '✗'}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.resultTitle}>
-                {worklet.verification.valid ? 'Identity Verified' : 'Verification Failed'}
-              </Text>
-              <Text style={styles.resultSub}>
-                {worklet.verification.valid
-                  ? 'Cryptographic signature is valid'
-                  : 'Signature does not match public key'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={[styles.idCard, { backgroundColor: inputBg, borderColor: border }]}>
-            <Row label="Name" value={worklet.verification.identity.name} fg={fg} sub={sub} />
-            <Row label="Date of Birth" value={worklet.verification.identity.dob} fg={fg} sub={sub} />
-            <Row
-              label="ID Number"
-              value={worklet.verification.identity.publicKey.slice(0, 12).toUpperCase().match(/.{1,4}/g)!.join('-')}
-              fg={fg} sub={sub} mono
-            />
-            <Row label="Issued" value={worklet.verification.identity.issuedAt.slice(0, 10)} fg={fg} sub={sub} />
-            <Row label="Verified at" value={worklet.verification.verifiedAt.slice(0, 19).replace('T', ' ')} fg={fg} sub={sub} />
-            <View style={[styles.divider, { backgroundColor: border }]} />
-            <Text style={[styles.pubKeyLabel, { color: sub }]}>PUBLIC KEY</Text>
-            <Text style={[styles.pubKey, { color: sub }]} numberOfLines={3}>
-              {worklet.verification.identity.publicKey}
-            </Text>
-          </View>
-
-          <TouchableOpacity style={styles.btnPrimary} onPress={handleReset}>
-            <Text style={styles.btnText}>Verify Another</Text>
-          </TouchableOpacity>
-        </>
-      )}
+      <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
+        <Text style={[styles.cardTitle, { color: fg }]}>Coming Soon</Text>
+        <Text style={[styles.desc, { color: sub }]}>
+          Identity verification functionality will be added here.
+        </Text>
+      </View>
     </ScrollView>
-  )
-}
-
-function Row({ label, value, fg, sub, mono = false }: {
-  label: string; value: string; fg: string; sub: string; mono?: boolean
-}) {
-  return (
-    <View style={styles.row}>
-      <Text style={[styles.rowLabel, { color: sub }]}>{label}</Text>
-      <Text style={[styles.rowValue, { color: fg, fontFamily: mono ? 'monospace' : undefined }]}>{value}</Text>
-    </View>
   )
 }
 
