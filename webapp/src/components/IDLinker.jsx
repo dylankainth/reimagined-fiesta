@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Link01Icon, Tick01Icon } from '@hugeicons/core-free-icons'
 import crypto from 'hypercore-crypto'
+import { useState } from 'react'
 import '../styles/IDLinker.css'
 
 export default function IDLinker({ onLinkComplete, loading }) {
@@ -92,7 +94,16 @@ export default function IDLinker({ onLinkComplete, loading }) {
 
   return (
     <div className="id-linker">
-      <h2>🔗 Link Digital ID</h2>
+      <h2 className="title-with-icon">
+        <HugeiconsIcon
+          icon={Link01Icon}
+          size={22}
+          strokeWidth={1.75}
+          color="currentColor"
+          aria-hidden
+        />
+        Link Digital ID
+      </h2>
 
       <div className="steps">
         <div className={`step ${step === 'passport' ? 'active' : ''}`}>
@@ -250,8 +261,21 @@ export default function IDLinker({ onLinkComplete, loading }) {
             <p><strong>Verifier:</strong> {verifierInfo.name}</p>
           </div>
 
-          <button type="submit" className="btn btn-success" disabled={loading}>
-            {loading ? 'Storing...' : '✓ Verify & Store on Pear'}
+          <button type="submit" className="btn btn-success btn-with-icon" disabled={loading}>
+            {loading ? (
+              'Storing...'
+            ) : (
+              <>
+                <HugeiconsIcon
+                  icon={Tick01Icon}
+                  size={18}
+                  strokeWidth={2}
+                  color="currentColor"
+                  aria-hidden
+                />
+                Verify & Store on Pear
+              </>
+            )}
           </button>
           <button 
             type="button" 

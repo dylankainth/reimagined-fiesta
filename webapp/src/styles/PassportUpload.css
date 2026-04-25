@@ -2,10 +2,18 @@
   animation: fadeIn 0.3s ease;
 }
 
-.passport-upload h2 {
-  font-size: 20px;
+.passport-upload-title {
+  font-size: clamp(1.5rem, 3.5vw, 2.125rem);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin-top: 28px;
+  margin-bottom: 16px;
+  color: #1c1917;
+}
+
+.passport-upload .key-display {
   margin-bottom: 20px;
-  color: #333;
 }
 
 .method-toggle {
@@ -18,7 +26,7 @@
   flex: 1;
   padding: 12px 15px;
   border: 2px solid #ddd;
-  border-radius: 8px;
+  border-radius: 9999px;
   background: white;
   color: #666;
   font-weight: 500;
@@ -26,13 +34,13 @@
 }
 
 .method-toggle button.active {
-  border-color: #667eea;
-  background: #f0f4ff;
-  color: #667eea;
+  border-color: var(--theme-accent);
+  background: var(--theme-accent-soft-bg);
+  color: var(--theme-accent);
 }
 
 .method-toggle button:hover {
-  border-color: #667eea;
+  border-color: var(--theme-accent);
 }
 
 .form {
@@ -52,14 +60,13 @@
   margin-bottom: 6px;
   color: #555;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .form-group input,
 .form-group textarea {
-  padding: 10px 12px;
+  padding: 10px 16px;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 9999px;
   font-size: 14px;
   transition: border 0.2s;
 }
@@ -67,8 +74,8 @@
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 3px var(--theme-accent-ring);
 }
 
 .form-row {
@@ -87,7 +94,7 @@
   text-align: center;
   padding: 30px 20px;
   background: #f9f9f9;
-  border-radius: 8px;
+  border-radius: 9999px;
   border: 2px dashed #ddd;
 }
 
@@ -98,9 +105,9 @@
 }
 
 .btn {
-  padding: 12px 20px;
+  padding: 12px 22px;
   border: none;
-  border-radius: 6px;
+  border-radius: 9999px;
   font-weight: 600;
   font-size: 14px;
   transition: all 0.3s ease;
@@ -109,13 +116,13 @@
 }
 
 .btn-primary {
-  background: #667eea;
+  background: var(--theme-accent);
   color: white;
 }
 
 .btn-primary:hover {
-  background: #5568d3;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  background: var(--theme-accent-hover);
+  box-shadow: 0 4px 12px var(--theme-accent-shadow);
 }
 
 .btn-primary:disabled {

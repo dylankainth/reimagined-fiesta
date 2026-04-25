@@ -1,7 +1,9 @@
-import { useState, useRef } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { ImageUpload01Icon } from '@hugeicons/core-free-icons'
+import { useRef, useState } from 'react'
 import '../styles/PassportUpload.css'
 
-export default function PassportUpload({ onPassportData }) {
+export default function PassportUpload({ publicKey, onPassportData }) {
   const [method, setMethod] = useState('manual')
   const [formData, setFormData] = useState({
     number: '',
@@ -53,7 +55,11 @@ export default function PassportUpload({ onPassportData }) {
 
   return (
     <div className="passport-upload">
-      <h2>📋 Passport Data Entry</h2>
+      <h2 className="passport-upload-title">Passport Data Entry</h2>
+
+      <div className="key-display">
+        <small>Public Key: {publicKey?.slice(0, 16)}...</small>
+      </div>
 
       <div className="method-toggle">
         <button 
@@ -165,10 +171,18 @@ export default function PassportUpload({ onPassportData }) {
             style={{ display: 'none' }}
           />
           <button 
-            className="btn btn-secondary"
+            type="button"
+            className="btn btn-secondary btn-with-icon"
             onClick={() => fileInputRef.current?.click()}
           >
-            📷 Upload Passport Image
+            <HugeiconsIcon
+              icon={ImageUpload01Icon}
+              size={18}
+              strokeWidth={1.75}
+              color="currentColor"
+              aria-hidden
+            />
+            Upload Passport Image
           </button>
           <p className="hint">Supported: JPG, PNG, PDF. OCR processing happens client-side.</p>
         </div>

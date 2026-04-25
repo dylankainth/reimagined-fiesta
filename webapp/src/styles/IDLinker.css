@@ -49,9 +49,9 @@
 }
 
 .step.active .step-number {
-  background: #667eea;
+  background: var(--theme-accent);
   color: white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px var(--theme-accent-shadow);
 }
 
 .step span:last-child {
@@ -61,7 +61,7 @@
 }
 
 .step.active span:last-child {
-  color: #667eea;
+  color: var(--theme-accent);
   font-weight: 600;
 }
 
@@ -82,14 +82,13 @@
   margin-bottom: 6px;
   color: #555;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .form-group input,
 .form-group textarea {
-  padding: 10px 12px;
+  padding: 10px 16px;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 9999px;
   font-size: 14px;
   transition: border 0.2s;
 }
@@ -97,8 +96,8 @@
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 3px var(--theme-accent-ring);
 }
 
 .form-row {
@@ -130,16 +129,16 @@
   padding: 15px;
   border-radius: 6px;
   margin: 15px 0;
-  border-left: 4px solid #667eea;
-  font-family: 'Monaco', monospace;
+  border-left: 4px solid var(--theme-accent);
+  font-family: inherit;
   font-size: 12px;
   word-break: break-all;
   color: #666;
 }
 
 .summary {
-  background: #f0f4ff;
-  border: 1px solid #dcd7ff;
+  background: var(--theme-accent-soft-bg);
+  border: 1px solid var(--theme-accent-soft-border);
   border-radius: 6px;
   padding: 15px;
   margin-bottom: 15px;
@@ -147,10 +146,9 @@
 
 .summary h4 {
   font-size: 13px;
-  color: #667eea;
+  color: var(--theme-accent);
   margin-bottom: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .summary p {
@@ -161,7 +159,7 @@
 
 .summary code {
   background: white;
-  border: 1px solid #dcd7ff;
+  border: 1px solid var(--theme-accent-soft-border);
 }
 
 @keyframes fadeIn {

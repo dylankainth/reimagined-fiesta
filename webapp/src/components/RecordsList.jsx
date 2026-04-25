@@ -1,54 +1,57 @@
+import { HugeiconsIcon } from '@hugeicons/react'
+import { DocumentValidationIcon } from '@hugeicons/core-free-icons'
 import '../styles/RecordsList.css'
 
 export default function RecordsList({ records }) {
-  if (records.length === 0) {
-    return (
-      <div className="records-empty">
-        <p>No verified IDs yet. Start by verifying a passport.</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="records-list">
-      <h2>📄 Verified ID Records ({records.length})</h2>
-      
-      <div className="records">
-        {records.map((record, idx) => (
-          <div key={idx} className="record-card">
-            <div className="record-header">
-              <h3>{record.passportData.firstName} {record.passportData.lastName}</h3>
-              <span className="badge">{record.verificationMethod?.toUpperCase() || 'MANUAL'}</span>
-            </div>
+    <div className="records-sidebar-panel">
+      <div className="sidebar-header">
+        <div className="sidebar-title">
+          <HugeiconsIcon
+            icon={DocumentValidationIcon}
+            size={18}
+            strokeWidth={1.75}
+            color="currentColor"
+            aria-hidden
+          />
+          <span>Verified Records</span>
+        </div>
+        <div className="sidebar-meta">
+          <span className="sidebar-count">{records.length}</span>
+        </div>
+      </div>
 
-            <div className="record-content">
-              <div className="record-section">
-                <h4>Passport</h4>
-                <p><strong>Number:</strong> {record.passportData.number}</p>
-                <p><strong>DOB:</strong> {record.passportData.dateOfBirth}</p>
-                <p><strong>Nationality:</strong> {record.passportData.nationality}</p>
-                <p><strong>Expires:</strong> {record.passportData.expiryDate}</p>
-              </div>
-
-              <div className="record-section">
-                <h4>Digital ID</h4>
-                <p><strong>ID:</strong> <code>{record.digitalID.id.slice(0, 16)}...</code></p>
-                <p><strong>Public Key:</strong> <code>{record.digitalID.publicKey.slice(0, 16)}...</code></p>
-              </div>
-
-              <div className="record-section">
-                <h4>Verification</h4>
-                <p><strong>Verified By:</strong> {record.verifiedBy}</p>
-                <p><strong>Timestamp:</strong> {new Date(record.timestamp).toLocaleString()}</p>
-                {record.notes && <p><strong>Notes:</strong> {record.notes}</p>}
-              </div>
-            </div>
-
-            <div className="record-footer">
-              <small>Record #{idx + 1}</small>
-            </div>
+      <div className="sidebar-body">
+        {records.length === 0 ? (
+          <div className="sidebar-empty">
+            <p>No verified IDs yet.</p>
+            <p>Start by verifying a passport.</p>
           </div>
-        ))}
+        ) : (
+          <ul className="sidebar-list">
+            {records.map((record, idx) => (
+              <li key={idx} className="sidebar-item">
+                <div className="sidebar-item-dot" />
+                <div className="sidebar-item-body">
+                  <div className="sidebar-item-top">
+                    <span className="sidebar-item-name">
+                      {record.passportData.firstName} {record.passportData.lastName}
+                    </span>
+                    <span className="sidebar-item-time">
+                      {new Date(record.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                  <div className="sidebar-item-sub">
+                    <span className="sidebar-item-badge">{record.verificationMethod?.toUpperCase() || 'MANUAL'}</span>
+                    <span className="sidebar-item-detail">
+                      {record.passportData.nationality} · {record.passportData.number}
+                    </span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )

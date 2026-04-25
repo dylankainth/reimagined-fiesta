@@ -3,6 +3,16 @@ import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Alert, TextInput, Dimensions, Image,
 } from 'react-native'
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Check,
+  CircleX,
+  CreditCard,
+  Info,
+  Landmark,
+  User,
+} from 'lucide-react-native'
 import QRCode from 'qrcode'
 import { useIdentity } from '@/hooks/use-identity'
 import { usePear } from '@/hooks/use-pear'

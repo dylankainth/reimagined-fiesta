@@ -1,0 +1,43 @@
+.landing {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 32px 24px;
+  text-align: center;
+  background: #fff;
+}
+
+.landing-title {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 600;
+  color: #1a1a1a;
+  line-height: 1.2;
+  max-width: 20ch;
+}
+
+.landing-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
+  border-radius: 9999px;
+  background: var(--theme-accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  box-shadow: 0 2px 12px var(--theme-accent-shadow);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.landing-cta:hover {
+  background: var(--theme-accent-hover);
+}
+
+.landing-cta:active {
+  transform: scale(0.98);
+}

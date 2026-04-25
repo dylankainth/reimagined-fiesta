@@ -4,31 +4,74 @@
   box-sizing: border-box;
 }
 
+:root {
+  --font-sans: "Google Sans", ui-sans-serif, system-ui, sans-serif;
+  --theme-accent: #ea580c;
+  --theme-accent-hover: #c2410c;
+  --theme-accent-soft-bg: #fff7ed;
+  --theme-accent-soft-border: #fed7aa;
+  --theme-accent-ring: rgba(234, 88, 12, 0.2);
+  --theme-accent-shadow: rgba(234, 88, 12, 0.35);
+}
+
+html {
+  font-family: var(--font-sans);
+  height: 100%;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: var(--font-sans);
+  letter-spacing: normal;
+  background: #fff;
   color: #333;
-  min-height: 100vh;
-  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 #root {
-  max-width: 1200px;
-  margin: 0 auto;
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 input, textarea, select {
   font-size: 16px;
+  font-family: inherit;
 }
 
 button {
   cursor: pointer;
   font-size: 14px;
+  font-family: inherit;
 }
 
 code {
   background: #f4f4f4;
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: inherit;
+}
+
+.title-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-with-icon svg {
+  flex-shrink: 0;
+}
+
+.btn-with-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-with-icon svg {
+  flex-shrink: 0;
 }

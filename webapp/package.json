@@ -8,6 +8,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hugeicons/core-free-icons": "^4.1.1",
+    "@hugeicons/react": "^1.1.6",
     "events": "^3.3.0",
     "hypercore": "^10.0.0",
     "hypercore-crypto": "^3.6.1",
@@ -16,6 +18,7 @@
     "process": "^0.11.10",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-router-dom": "^7.14.2",
     "stream-browserify": "^3.0.0",
     "util": "^0.12.5"
   },
