@@ -16,9 +16,14 @@ export const MSG = Object.freeze({
   JOB_PROGRESS: 'JOB_PROGRESS', // live stdout line from subprocess
 
   // Requester → provider
-  JOB_REQUEST:  'JOB_REQUEST',  // submit a job
-  PAYMENT_TICK: 'PAYMENT_TICK', // USDT stub payment for this interval
-  CANCEL_JOB:   'CANCEL_JOB',   // abort the job
+  JOB_REQUEST:   'JOB_REQUEST',   // submit a job
+  PAYMENT_TICK:  'PAYMENT_TICK',  // USDT stub payment for this interval
+  CANCEL_JOB:    'CANCEL_JOB',    // abort the job
+
+  // Requester → provider — payment channel lifecycle
+  CHANNEL_OPEN:  'CHANNEL_OPEN',  // payment channel opened on job accept
+  CHANNEL_PAUSE: 'CHANNEL_PAUSE', // payment paused (watchdog / failover)
+  CHANNEL_CLOSE: 'CHANNEL_CLOSE', // final settlement on job complete
 })
 
 // ─── Job lifecycle states ──────────────────────────────────────────────────────
@@ -84,6 +89,10 @@ export function decode(buf) {
  * JOB_COMPLETE{ jobId, totalCost, logPublicKey }
  * JOB_FAILED  { jobId, reason }
  *
- * PAYMENT_TICK{ jobId, amount, tickIndex, totalPaid }
- * CANCEL_JOB  { jobId }
+ * PAYMENT_TICK  { jobId, amount, tickIndex, totalPaid }
+ * CANCEL_JOB    { jobId }
+ *
+ * CHANNEL_OPEN  { jobId, ts }
+ * CHANNEL_PAUSE { jobId, totalPaid }
+ * CHANNEL_CLOSE { jobId, totalPaid, finalAmount }
  */

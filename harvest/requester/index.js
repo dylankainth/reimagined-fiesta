@@ -52,11 +52,14 @@ let   tickIndex  = 0
 let   payTimer   = null
 let   watchdogTimer  = null
 let   failoverTimer  = null
-let   lastHeartbeatAt = null
-let   heartbeatCount  = 0
-let   progressCurrent = 0
-let   progressTotal   = 30
+let   lastHeartbeatAt  = null
+let   heartbeatCount   = 0
+let   progressCurrent  = 0
+let   progressTotal    = 30
 let   lastProgressLine = null
+let   channelStatus    = 'NONE'   // NONE | OPEN | PAUSED | CLOSED
+let   paymentStartedAt = null
+let   lastTickAmount   = 0
 
 function log(line) {
   const ts = new Date().toISOString().slice(11, 23)
@@ -125,12 +128,15 @@ function findAndSubmitJob() {
   const p   = providers.get(bestPeerId)
   const adv = p.advertise
 
-  // Reset per-run progress tracking
+  // Reset per-run progress and channel tracking
   progressCurrent  = 0
   progressTotal    = 30
   lastProgressLine = null
   lastHeartbeatAt  = null
   heartbeatCount   = 0
+  channelStatus    = 'NONE'
+  paymentStartedAt = null
+  lastTickAmount   = 0
 
   jobStatus  = JOB_STATUS.MATCHED
   currentJob = {
@@ -162,6 +168,8 @@ swarm.on('connection', (conn) => {
       if (currentJob?.peerId === peerId &&
           (jobStatus === JOB_STATUS.RUNNING || jobStatus === JOB_STATUS.MATCHED)) {
         log(`⚠  Provider ${peerId} disconnected — seeking failover...`)
+        channelStatus = 'PAUSED'
+        log(`CHANNEL_PAUSE — provider dropped (paid $${totalPaid.toFixed(6)} so far)`)
         stopPaymentStream()
         stopWatchdog()
         currentJob.failedPeers.add(peerId)
@@ -230,6 +238,14 @@ function handleJobAccept(data, peerId) {
   currentJob.logPublicKey = logPublicKey
   currentJob.acceptedAt   = Date.now()
 
+  // Signal channel open
+  const provider = providers.get(peerId)
+  if (provider) {
+    provider.send(makeMsg(MSG.CHANNEL_OPEN, { jobId, ts: Date.now() }))
+  }
+  channelStatus = 'OPEN'
+  log('CHANNEL_OPEN — payment stream started')
+
   startPaymentStream(peerId)
   startWatchdog()
 }
@@ -279,6 +295,13 @@ function handleJobComplete(data) {
   stopPaymentStream()
   stopWatchdog()
 
+  // Final settlement — close the payment channel
+  const prov = providers.get(currentJob?.peerId)
+  if (prov) {
+    prov.send(makeMsg(MSG.CHANNEL_CLOSE, { jobId, totalPaid, finalAmount: totalPaid }))
+  }
+  channelStatus = 'CLOSED'
+  log(`CHANNEL_CLOSE — final settlement $${totalPaid.toFixed(6)} USDT`)
   log(`JOB_COMPLETE totalCost=$${totalCost.toFixed(6)} totalPaid=$${totalPaid.toFixed(6)}`)
 
   console.clear()
@@ -308,14 +331,16 @@ function handleJobFailed(data) {
 
 // ─── Payment stream ───────────────────────────────────────────────────────────
 function startPaymentStream(peerId) {
+  if (!paymentStartedAt) paymentStartedAt = Date.now()
   payTimer = setInterval(() => {
     if (jobStatus !== JOB_STATUS.RUNNING) return
     const provider = providers.get(peerId)
     if (!provider) return
 
     const tickAmount = (JOB.cores * 0.001 + JOB.ramGB * 0.0005) * (PAYMENT_INTERVAL / 60_000)
-    totalPaid += tickAmount
-    tickIndex += 1
+    totalPaid    += tickAmount
+    tickIndex    += 1
+    lastTickAmount = tickAmount
 
     // Budget exhaustion checks
     const remaining = JOB.maxBudgetUSDT - totalPaid
@@ -354,6 +379,12 @@ function startWatchdog() {
     const silence = Date.now() - lastHeartbeatAt
     if (silence > WATCHDOG_TIMEOUT) {
       log(`⚠  WATCHDOG: no heartbeat for ${(silence / 1000).toFixed(0)}s — failing over`)
+      const deadPeer = providers.get(currentJob.peerId)
+      if (deadPeer) {
+        deadPeer.send(makeMsg(MSG.CHANNEL_PAUSE, { jobId: currentJob.jobId, totalPaid }))
+      }
+      channelStatus = 'PAUSED'
+      log(`CHANNEL_PAUSE — watchdog triggered (paid $${totalPaid.toFixed(6)} so far)`)
       stopPaymentStream()
       stopWatchdog()
       currentJob.failedPeers.add(currentJob.peerId)
@@ -433,6 +464,29 @@ function renderUI() {
     console.log(`  Budget    : $${JOB.maxBudgetUSDT.toFixed(4)} USDT`)
   }
   console.log('')
+
+  // ── Payment Stream ────────────────────────────────────────────────────────
+  if (totalPaid > 0 || channelStatus !== 'NONE') {
+    console.log('─── Payment Stream ─────────────────────────────────')
+    const provId = currentJob?.providerId ?? '????????????????'
+    console.log(`  Streaming USDT to ${provId}...`)
+    console.log('')
+
+    // Budget usage bar (16 wide)
+    const budgetBar  = progressBar(totalPaid, JOB.maxBudgetUSDT, 10)
+    const elapsed    = paymentStartedAt ? (Date.now() - paymentStartedAt) / 60_000 : 0
+    const rate       = elapsed > 0.001 ? totalPaid / elapsed : 0
+    const chanIcon   = channelStatus === 'OPEN'   ? '● OPEN'
+                     : channelStatus === 'PAUSED' ? '◐ PAUSED'
+                     : channelStatus === 'CLOSED' ? '✓ CLOSED'
+                     : '○ NONE'
+
+    console.log(`  Tick #${String(tickIndex).padEnd(4)} +$${lastTickAmount.toFixed(6)} USDT   [${budgetBar}]`)
+    console.log(`  Total     $${totalPaid.toFixed(6)} USDT`)
+    console.log(`  Rate      $${rate.toFixed(6)}/min`)
+    console.log(`  Channel   ${chanIcon}`)
+    console.log('')
+  }
 
   // ── Last 5 log lines ──────────────────────────────────────────────────────
   console.log('─── Last 5 log lines ───────────────────────────────')

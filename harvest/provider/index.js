@@ -136,9 +136,12 @@ async function handleMessage(data, peerId) {
   if (!peer) return
 
   switch (data.type) {
-    case MSG.JOB_REQUEST:  return handleJobRequest(data, peer, peerId)
-    case MSG.PAYMENT_TICK: return handlePaymentTick(data, peerId)
-    case MSG.CANCEL_JOB:   return handleCancelJob(data, peerId)
+    case MSG.JOB_REQUEST:   return handleJobRequest(data, peer, peerId)
+    case MSG.PAYMENT_TICK:  return handlePaymentTick(data, peerId)
+    case MSG.CANCEL_JOB:    return handleCancelJob(data, peerId)
+    case MSG.CHANNEL_OPEN:  return handleChannelEvent(data, 'open')
+    case MSG.CHANNEL_PAUSE: return handleChannelEvent(data, 'pause')
+    case MSG.CHANNEL_CLOSE: return handleChannelEvent(data, 'close')
     default:
       log(`Unknown msg type: ${data.type} from ${peerId}`)
   }
@@ -229,6 +232,17 @@ function handlePaymentTick(data, peerId) {
   bee.put(`job:${jobId}:payment:${tickIndex}`, {
     amount, totalPaid: job.paymentReceived, ts: Date.now(),
   }).catch(() => {})
+}
+
+// ─── Channel event handler ────────────────────────────────────────────────────
+function handleChannelEvent(data, event) {
+  const { jobId, totalPaid, finalAmount } = data
+  const amount = finalAmount ?? totalPaid ?? 0
+  bee.put(`job:${jobId}:channel:${event}`, {
+    event, amount, timestamp: Date.now(),
+  }).catch(() => {})
+  const label = `CHANNEL_${event.toUpperCase()}`
+  log(`${label} jobId=${jobId?.slice(0, 8)} amount=$${amount.toFixed ? amount.toFixed(6) : amount}`)
 }
 
 // ─── Cancel handler ───────────────────────────────────────────────────────────
