@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "main": "index.mjs",
-  "pear": {
-    "name": "harvest-requester",
-    "type": "terminal"
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node index.mjs"
   },
   "dependencies": {
     "@harvest/shared": "file:../shared",
@@ -13,7 +13,6 @@
     "corestore": "^7.9.2",
     "protomux": "^3.10.0",
     "compact-encoding": "^2.15.0",
-    "b4a": "^1.6.7",
-    "crypto": "npm:bare-node-crypto"
+    "b4a": "^1.6.7"
   }
 }

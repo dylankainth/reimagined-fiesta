@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "main": "index.mjs",
-  "pear": {
-    "name": "harvest-provider",
-    "type": "terminal"
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node index.mjs"
   },
   "dependencies": {
     "@harvest/shared": "file:../shared",
@@ -15,8 +15,6 @@
     "protomux": "^3.10.0",
     "compact-encoding": "^2.15.0",
     "b4a": "^1.6.7",
-    "cli-table3": "^0.6.5",
-    "child_process": "npm:bare-node-child-process",
-    "crypto": "npm:bare-node-crypto"
+    "cli-table3": "^0.6.5"
   }
 }

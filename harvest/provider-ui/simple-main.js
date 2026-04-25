@@ -4,18 +4,17 @@ const path = require('path')
 function createWindow() {
     // Create the browser window
     const mainWindow = new BrowserWindow({
-        width: 900,
-        height: 500,
-        minWidth: 500,
+        width: 960,
+        height: 680,
+        backgroundColor: '#0f0f0f',
         webPreferences: {
-            preload: path.join(__dirname, 'electron', 'preload.js'),
             nodeIntegration: true,
             contextIsolation: false
         }
     })
 
-    // Load the renderer HTML file
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+    // Load the provider UI
+    mainWindow.loadFile(path.join(__dirname, 'index.html'))
 
     // Open DevTools for debugging (optional)
     // mainWindow.webContents.openDevTools()

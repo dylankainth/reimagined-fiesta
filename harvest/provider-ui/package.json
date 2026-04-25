@@ -1,25 +1,18 @@
 {
   "name": "harvest-provider-ui",
   "version": "1.0.0",
-  "type": "module",
-  "main": "index.js",
+  "main": "simple-main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
   "dependencies": {
     "child_process": "npm:bare-node-child-process",
     "http": "npm:bare-node-http",
     "path": "npm:bare-node-path",
     "url": "npm:bare-node-url"
   },
-  "pear": {
-    "name": "harvest-provider-ui",
-    "type": "desktop",
-    "gui": {
-      "backgroundColor": "#0f0f0f",
-      "width": 960,
-      "height": 680
-    },
-    "sidecar": {
-      "type": "node",
-      "entrypoint": "index.js"
-    }
+  "devDependencies": {
+    "electron": "^41.3.0"
   }
 }
