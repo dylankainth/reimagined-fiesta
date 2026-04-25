@@ -1,6 +1,5 @@
 /** @typedef {import('pear-interface')} */ /* global Pear */
 import { spawn } from 'child_process'
-import { createServer } from 'http'
 import { join } from 'path'
 
 const procGlobal = globalThis.process
@@ -23,7 +22,7 @@ let currentState = {
 // Resolve node binary
 const nodeBin = procGlobal?.env?.NVM_BIN
   ? join(procGlobal.env.NVM_BIN, 'node')
-  : '/home/dylan/.nvm/versions/node/v22.22.2/bin/node'
+  : procGlobal?.execPath ?? 'node'
 
 const proc = spawn(nodeBin, [providerPath], {
   env: {
@@ -42,44 +41,22 @@ proc.stdout.on('data', (chunk) => {
   buf = lines.pop()
   for (const line of lines) {
     if (!line.trim()) continue
-    try { currentState = JSON.parse(line) } catch {}
+    try { currentState = JSON.parse(line) } catch { }
   }
 })
 
 proc.on('error', (err) => console.error('Provider spawn error:', err.message))
 proc.on('exit', (code) => console.log('Provider exited:', code))
 
-// SSE server is only needed outside Pear. Pear desktop uses Pear.pipe.
-let server = null
-if (!globalThis.Pear?.pipe) {
-  const SSE_PORT = 4321
-  server = createServer((req, res) => {
-    if (req.url !== '/state') { res.writeHead(404); res.end(); return }
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-    })
-    const send = () => {
-      try { res.write(`data: ${JSON.stringify(currentState)}\n\n`) } catch {}
-    }
-    send()
-    const id = setInterval(send, 1000)
-    req.on('close', () => clearInterval(id))
-  })
-  server.listen(SSE_PORT, '127.0.0.1')
-}
-
-// Also push via Pear.pipe if desktop IPC is available
+// Push state updates via Pear.pipe to the desktop window
 if (globalThis.Pear?.pipe) {
   setInterval(() => {
     try {
       Pear.pipe.write(JSON.stringify({ type: 'state', data: currentState }) + '\n')
-    } catch {}
+    } catch { }
   }, 1000)
 }
 
-const cleanup = () => { proc.kill('SIGTERM'); server?.close() }
+const cleanup = () => { proc.kill('SIGTERM') }
 if (globalThis.Pear) Pear.teardown(cleanup)
 else procGlobal?.on?.('exit', cleanup)

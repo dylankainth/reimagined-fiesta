@@ -1,357 +1,471 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Harvest — Provider</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harvest — Provider</title>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-  :root {
-    --bg:      #0f0f0f;
-    --card:    #1a1a1a;
-    --border:  #2a2a2a;
-    --green:   #00ff88;
-    --blue:    #4488ff;
-    --purple:  #aa66ff;
-    --amber:   #ffaa33;
-    --red:     #ff4466;
-    --dim:     #888888;
-    --text:    #ffffff;
-    --mono:    'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-    --sans:    system-ui, -apple-system, sans-serif;
-  }
+    :root {
+      --bg: #0f0f0f;
+      --card: #1a1a1a;
+      --border: #2a2a2a;
+      --green: #00ff88;
+      --blue: #4488ff;
+      --purple: #aa66ff;
+      --amber: #ffaa33;
+      --red: #ff4466;
+      --dim: #888888;
+      --text: #ffffff;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --sans: system-ui, -apple-system, sans-serif;
+    }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 14px;
-    line-height: 1.5;
-    padding: 20px;
-    user-select: none;
-    -webkit-user-select: none;
-  }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 20px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
 
-  /* ── Header ─────────────────────────────────────────────────────────────── */
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  .header-left { display: flex; align-items: center; gap: 12px; }
-  .logo {
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--green);
-    font-family: var(--mono);
-  }
-  .logo-sep { color: var(--border); }
-  .node-label { color: var(--dim); font-size: 13px; }
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
 
-  .header-right { display: flex; align-items: center; gap: 20px; }
-  .header-meta { font-family: var(--mono); font-size: 12px; color: var(--dim); }
-  .header-meta span { color: var(--text); }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
 
-  .live-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 6px var(--green);
-    animation: pulse 2s ease-in-out infinite;
-    flex-shrink: 0;
-  }
-  .live-badge {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 12px; color: var(--green);
-    font-family: var(--mono);
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--green); }
-    50%       { opacity: 0.4; box-shadow: 0 0 2px var(--green); }
-  }
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--green);
+      font-family: var(--mono);
+    }
 
-  /* ── Cards ───────────────────────────────────────────────────────────────── */
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px 20px;
-  }
-  .card-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--dim);
-    margin-bottom: 6px;
-  }
+    .logo-sep {
+      color: var(--border);
+    }
 
-  /* ── Metric row ──────────────────────────────────────────────────────────── */
-  .metrics {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-  .metric-value {
-    font-family: var(--mono);
-    font-size: 26px;
-    font-weight: 700;
-    line-height: 1.2;
-    transition: color 0.4s ease;
-  }
-  .metric-value.green { color: var(--green); }
-  .metric-sub {
-    font-size: 11px;
-    color: var(--dim);
-    margin-top: 2px;
-    font-family: var(--mono);
-  }
+    .node-label {
+      color: var(--dim);
+      font-size: 13px;
+    }
 
-  /* ── Active jobs ─────────────────────────────────────────────────────────── */
-  .section-title {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--dim);
-    margin-bottom: 10px;
-  }
-  .jobs-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
 
-  .job-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 16px;
-  }
-  .job-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  .type-badge {
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-weight: 600;
-    flex-shrink: 0;
-  }
-  .badge-ml      { background: #1a2a44; color: #66aaff; border: 1px solid #2a4a88; }
-  .badge-render  { background: #2a1a44; color: #cc88ff; border: 1px solid #5a2a88; }
-  .badge-data    { background: #3a2a00; color: #ffcc44; border: 1px solid #7a5a00; }
-  .badge-comp    { background: #1e1e1e; color: #aaaaaa; border: 1px solid #3a3a3a; }
+    .header-meta {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--dim);
+    }
 
-  .job-id {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--dim);
-    flex: 1;
-  }
-  .job-earned {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--green);
-    font-weight: 600;
-  }
+    .header-meta span {
+      color: var(--text);
+    }
 
-  .progress-track {
-    height: 6px;
-    background: #222;
-    border-radius: 3px;
-    overflow: hidden;
-    margin-bottom: 8px;
-  }
-  .progress-fill {
-    height: 100%;
-    background: var(--green);
-    border-radius: 3px;
-    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 8px rgba(0,255,136,0.4);
-  }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
 
-  .job-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
-  }
-  .job-epoch { color: var(--dim); font-family: var(--mono); }
-  .hb-indicator {
-    display: flex; align-items: center; gap: 6px;
-    color: var(--dim); font-family: var(--mono); font-size: 11px;
-  }
-  .hb-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--green);
-    animation: pulse 1.5s ease-in-out infinite;
-  }
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--green);
+      font-family: var(--mono);
+    }
 
-  .no-jobs {
-    text-align: center;
-    color: var(--dim);
-    padding: 30px;
-    font-size: 13px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-bottom: 16px;
-  }
+    @keyframes pulse {
 
-  /* ── Log ─────────────────────────────────────────────────────────────────── */
-  .log-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 16px;
-  }
-  .log-line {
-    font-family: var(--mono);
-    font-size: 11px;
-    line-height: 1.7;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .log-line.complete { color: var(--green); }
-  .log-line.payment  { color: var(--amber); }
-  .log-line.hb       { color: #666; }
-  .log-line.error    { color: var(--red); }
+      0%,
+      100% {
+        opacity: 1;
+        box-shadow: 0 0 6px var(--green);
+      }
 
-  /* ── Footer ──────────────────────────────────────────────────────────────── */
-  .footer {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 14px;
-    font-size: 11px;
-    color: #444;
-    font-family: var(--mono);
-  }
+      50% {
+        opacity: 0.4;
+        box-shadow: 0 0 2px var(--green);
+      }
+    }
 
-  /* number transition */
-  .earning-num { transition: color 0.3s; }
-</style>
+    /* ── Cards ───────────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--dim);
+      margin-bottom: 6px;
+    }
+
+    /* ── Metric row ──────────────────────────────────────────────────────────── */
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric-value {
+      font-family: var(--mono);
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.2;
+      transition: color 0.4s ease;
+    }
+
+    .metric-value.green {
+      color: var(--green);
+    }
+
+    .metric-sub {
+      font-size: 11px;
+      color: var(--dim);
+      margin-top: 2px;
+      font-family: var(--mono);
+    }
+
+    /* ── Active jobs ─────────────────────────────────────────────────────────── */
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--dim);
+      margin-bottom: 10px;
+    }
+
+    .jobs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .job-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .job-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .type-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .badge-ml {
+      background: #1a2a44;
+      color: #66aaff;
+      border: 1px solid #2a4a88;
+    }
+
+    .badge-render {
+      background: #2a1a44;
+      color: #cc88ff;
+      border: 1px solid #5a2a88;
+    }
+
+    .badge-data {
+      background: #3a2a00;
+      color: #ffcc44;
+      border: 1px solid #7a5a00;
+    }
+
+    .badge-comp {
+      background: #1e1e1e;
+      color: #aaaaaa;
+      border: 1px solid #3a3a3a;
+    }
+
+    .job-id {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--dim);
+      flex: 1;
+    }
+
+    .job-earned {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .progress-track {
+      height: 6px;
+      background: #222;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 3px;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
+    }
+
+    .job-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .job-epoch {
+      color: var(--dim);
+      font-family: var(--mono);
+    }
+
+    .hb-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .hb-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .no-jobs {
+      text-align: center;
+      color: var(--dim);
+      padding: 30px;
+      font-size: 13px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    /* ── Log ─────────────────────────────────────────────────────────────────── */
+    .log-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .log-line {
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .log-line.complete {
+      color: var(--green);
+    }
+
+    .log-line.payment {
+      color: var(--amber);
+    }
+
+    .log-line.hb {
+      color: #666;
+    }
+
+    .log-line.error {
+      color: var(--red);
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────────── */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 14px;
+      font-size: 11px;
+      color: #444;
+      font-family: var(--mono);
+    }
+
+    /* number transition */
+    .earning-num {
+      transition: color 0.3s;
+    }
+  </style>
 </head>
+
 <body>
 
-<!-- Header -->
-<div class="header">
-  <div class="header-left">
-    <div class="logo">HARVEST</div>
-    <div class="logo-sep">·</div>
-    <div class="node-label">Provider Node</div>
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">HARVEST</div>
+      <div class="logo-sep">·</div>
+      <div class="node-label">Provider Node</div>
+    </div>
+    <div class="header-right">
+      <div class="header-meta">ID: <span id="pid">loading…</span></div>
+      <div class="header-meta">uptime: <span id="uptime">0s</span></div>
+      <div class="live-badge">
+        <div class="live-dot"></div> LIVE
+      </div>
+    </div>
   </div>
-  <div class="header-right">
-    <div class="header-meta">ID: <span id="pid">loading…</span></div>
-    <div class="header-meta">uptime: <span id="uptime">0s</span></div>
-    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+
+  <!-- Metric Cards -->
+  <div class="metrics">
+    <div class="card">
+      <div class="card-label">Total Earned</div>
+      <div class="metric-value green earning-num" id="earned">$0.000000</div>
+      <div class="metric-sub">USDT</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Active Jobs</div>
+      <div class="metric-value" id="active-jobs">0 / 3</div>
+      <div class="metric-sub" id="completed-jobs">0 completed</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Peers</div>
+      <div class="metric-value" id="peers">0</div>
+      <div class="metric-sub">connected</div>
+    </div>
   </div>
-</div>
 
-<!-- Metric Cards -->
-<div class="metrics">
-  <div class="card">
-    <div class="card-label">Total Earned</div>
-    <div class="metric-value green earning-num" id="earned">$0.000000</div>
-    <div class="metric-sub">USDT</div>
+  <!-- Active Jobs -->
+  <div class="section-title">Active Jobs</div>
+  <div id="jobs-container" class="jobs-list">
+    <div class="no-jobs">○&nbsp; Waiting for work…</div>
   </div>
-  <div class="card">
-    <div class="card-label">Active Jobs</div>
-    <div class="metric-value" id="active-jobs">0 / 3</div>
-    <div class="metric-sub" id="completed-jobs">0 completed</div>
+
+  <!-- Log -->
+  <div class="log-card">
+    <div class="section-title" style="margin-bottom:8px;">Live Log</div>
+    <div id="log-lines"></div>
   </div>
-  <div class="card">
-    <div class="card-label">Peers</div>
-    <div class="metric-value" id="peers">0</div>
-    <div class="metric-sub">connected</div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span id="logkey">logKey: —</span>
+    <span id="last-update">—</span>
   </div>
-</div>
 
-<!-- Active Jobs -->
-<div class="section-title">Active Jobs</div>
-<div id="jobs-container" class="jobs-list">
-  <div class="no-jobs">○&nbsp; Waiting for work…</div>
-</div>
+  <script>
+    const $ = id => document.getElementById(id)
 
-<!-- Log -->
-<div class="log-card">
-  <div class="section-title" style="margin-bottom:8px;">Live Log</div>
-  <div id="log-lines"></div>
-</div>
-
-<!-- Footer -->
-<div class="footer">
-  <span id="logkey">logKey: —</span>
-  <span id="last-update">—</span>
-</div>
-
-<script>
-  const $ = id => document.getElementById(id)
-
-  function typeBadge(type) {
-    const map = {
-      'ml-training':  ['ML-TRAIN',  'badge-ml'],
-      'rendering':    ['RENDER',    'badge-render'],
-      'data-process': ['DATA',      'badge-data'],
-      'compression':  ['COMPRESS',  'badge-comp'],
+    function typeBadge(type) {
+      const map = {
+        'ml-training': ['ML-TRAIN', 'badge-ml'],
+        'rendering': ['RENDER', 'badge-render'],
+        'data-process': ['DATA', 'badge-data'],
+        'compression': ['COMPRESS', 'badge-comp'],
+      }
+      const [label, cls] = map[type] ?? [type.toUpperCase(), 'badge-comp']
+      return `<span class="type-badge ${cls}">${label}</span>`
     }
-    const [label, cls] = map[type] ?? [type.toUpperCase(), 'badge-comp']
-    return `<span class="type-badge ${cls}">${label}</span>`
-  }
 
-  function fmtSince(ts) {
-    if (!ts) return '?'
-    return Math.round((Date.now() - ts) / 1000) + 's ago'
-  }
-
-  function logClass(line) {
-    if (line.includes('JOB_COMPLETE') || line.includes('COMPLETE')) return 'complete'
-    if (line.includes('PAYMENT') || line.includes('CHANNEL')) return 'payment'
-    if (line.includes('HB #')) return 'hb'
-    if (line.includes('err') || line.includes('ERR') || line.includes('Failed')) return 'error'
-    return ''
-  }
-
-  let prevEarned = 0
-
-  function renderState(s) {
-    if (!s) return
-
-    $('pid').textContent = s.providerId ? s.providerId.slice(0, 16) + '…' : 'loading…'
-    $('uptime').textContent = s.uptime ?? '0s'
-    $('peers').textContent = s.peers ?? 0
-
-    // Earned — flash green on change
-    const earned = s.totalEarned ?? 0
-    const earnEl = $('earned')
-    earnEl.textContent = '$' + earned.toFixed(6)
-    if (earned > prevEarned) {
-      earnEl.style.color = '#ffffff'
-      setTimeout(() => { earnEl.style.color = '' }, 400)
+    function fmtSince(ts) {
+      if (!ts) return '?'
+      return Math.round((Date.now() - ts) / 1000) + 's ago'
     }
-    prevEarned = earned
 
-    const maxJobs = s.capacity?.maxJobs ?? 3
-    $('active-jobs').textContent = `${(s.activeJobs ?? []).length} / ${maxJobs}`
-    $('completed-jobs').textContent = `${s.completedJobs ?? 0} completed`
+    function logClass(line) {
+      if (line.includes('JOB_COMPLETE') || line.includes('COMPLETE')) return 'complete'
+      if (line.includes('PAYMENT') || line.includes('CHANNEL')) return 'payment'
+      if (line.includes('HB #')) return 'hb'
+      if (line.includes('err') || line.includes('ERR') || line.includes('Failed')) return 'error'
+      return ''
+    }
 
-    // Jobs
-    const jobs = s.activeJobs ?? []
-    const container = $('jobs-container')
-    if (jobs.length === 0) {
-      container.innerHTML = '<div class="no-jobs">○&nbsp; Waiting for work…</div>'
-    } else {
-      container.innerHTML = jobs.map(job => {
-        const elapsed = job.startedAt ? (Date.now() - job.startedAt) / 1000 : 0
-        // Estimate epoch progress from elapsed time (1 epoch ≈ 1s for demo)
-        const epoch = Math.min(Math.round(elapsed), 30)
-        const pct   = Math.round((epoch / 30) * 100)
-        return `
+    let prevEarned = 0
+
+    function renderState(s) {
+      if (!s) return
+
+      $('pid').textContent = s.providerId ? s.providerId.slice(0, 16) + '…' : 'loading…'
+      $('uptime').textContent = s.uptime ?? '0s'
+      $('peers').textContent = s.peers ?? 0
+
+      // Earned — flash green on change
+      const earned = s.totalEarned ?? 0
+      const earnEl = $('earned')
+      earnEl.textContent = '$' + earned.toFixed(6)
+      if (earned > prevEarned) {
+        earnEl.style.color = '#ffffff'
+        setTimeout(() => { earnEl.style.color = '' }, 400)
+      }
+      prevEarned = earned
+
+      const maxJobs = s.capacity?.maxJobs ?? 3
+      $('active-jobs').textContent = `${(s.activeJobs ?? []).length} / ${maxJobs}`
+      $('completed-jobs').textContent = `${s.completedJobs ?? 0} completed`
+
+      // Jobs
+      const jobs = s.activeJobs ?? []
+      const container = $('jobs-container')
+      if (jobs.length === 0) {
+        container.innerHTML = '<div class="no-jobs">○&nbsp; Waiting for work…</div>'
+      } else {
+        container.innerHTML = jobs.map(job => {
+          const elapsed = job.startedAt ? (Date.now() - job.startedAt) / 1000 : 0
+          // Estimate epoch progress from elapsed time (1 epoch ≈ 1s for demo)
+          const epoch = Math.min(Math.round(elapsed), 30)
+          const pct = Math.round((epoch / 30) * 100)
+          return `
           <div class="job-card">
             <div class="job-header">
               ${typeBadge(job.type)}
@@ -369,58 +483,59 @@
               </span>
             </div>
           </div>`
-      }).join('')
-    }
-
-    // Log
-    const lines = (s.recentLog ?? []).slice().reverse()
-    $('log-lines').innerHTML = lines.map(l =>
-      `<div class="log-line ${logClass(l)}">${escHtml(l)}</div>`
-    ).join('')
-
-    // Footer
-    if (s.logKey) $('logkey').textContent = 'logKey: ' + s.logKey.slice(0, 24) + '…'
-    $('last-update').textContent = 'updated ' + new Date().toISOString().slice(11, 19)
-  }
-
-  function escHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-  }
-
-  // ── SSE connection ──────────────────────────────────────────────────────────
-  function connectSSE() {
-    const es = new EventSource('http://127.0.0.1:4321/state')
-    es.onmessage = (e) => {
-      try { renderState(JSON.parse(e.data)) } catch {}
-    }
-    es.onerror = () => {
-      es.close()
-      setTimeout(connectSSE, 2000)
-    }
-  }
-  connectSSE()
-
-  // ── Pear pipe fallback ──────────────────────────────────────────────────────
-  if (globalThis.Pear?.pipe) {
-    let pipeBuf = ''
-    Pear.pipe.on('data', (chunk) => {
-      pipeBuf += chunk.toString()
-      const parts = pipeBuf.split('\n')
-      pipeBuf = parts.pop()
-      for (const part of parts) {
-        if (!part.trim()) continue
-        try {
-          const msg = JSON.parse(part)
-          if (msg.type === 'state') renderState(msg.data)
-        } catch {}
+        }).join('')
       }
-    })
-  }
 
-  // ── postMessage fallback ────────────────────────────────────────────────────
-  window.addEventListener('message', (e) => {
-    if (e.data?.type === 'state') renderState(e.data.data)
-  })
-</script>
+      // Log
+      const lines = (s.recentLog ?? []).slice().reverse()
+      $('log-lines').innerHTML = lines.map(l =>
+        `<div class="log-line ${logClass(l)}">${escHtml(l)}</div>`
+      ).join('')
+
+      // Footer
+      if (s.logKey) $('logkey').textContent = 'logKey: ' + s.logKey.slice(0, 24) + '…'
+      $('last-update').textContent = 'updated ' + new Date().toISOString().slice(11, 19)
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    }
+
+    // ── Pear pipe (primary for desktop) ────────────────────────────────────────
+    if (globalThis.Pear?.pipe) {
+      let pipeBuf = ''
+      Pear.pipe.on('data', (chunk) => {
+        pipeBuf += chunk.toString()
+        const parts = pipeBuf.split('\n')
+        pipeBuf = parts.pop()
+        for (const part of parts) {
+          if (!part.trim()) continue
+          try {
+            const msg = JSON.parse(part)
+            if (msg.type === 'state') renderState(msg.data)
+          } catch { }
+        }
+      })
+    } else {
+      // ── SSE connection (fallback outside Pear) ──────────────────────────────────
+      function connectSSE() {
+        const es = new EventSource('http://127.0.0.1:4321/state')
+        es.onmessage = (e) => {
+          try { renderState(JSON.parse(e.data)) } catch { }
+        }
+        es.onerror = () => {
+          es.close()
+          setTimeout(connectSSE, 2000)
+        }
+      }
+      connectSSE()
+    }
+
+    // ── postMessage fallback ────────────────────────────────────────────────────
+    window.addEventListener('message', (e) => {
+      if (e.data?.type === 'state') renderState(e.data.data)
+    })
+  </script>
 </body>
+
 </html>

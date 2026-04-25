@@ -16,6 +16,10 @@
       "backgroundColor": "#0f0f0f",
       "width": 960,
       "height": 680
+    },
+    "sidecar": {
+      "type": "node",
+      "entrypoint": "index.js"
     }
   }
 }
