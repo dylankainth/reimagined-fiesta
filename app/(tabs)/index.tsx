@@ -1,44 +1,36 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator, Alert, TextInput, Dimensions, Image,
+  StyleSheet, ActivityIndicator, Alert, TextInput,
 } from 'react-native'
-import QRCode from 'qrcode'
+import QRCode from 'react-native-qrcode-svg'
 import { useIdentity } from '@/hooks/use-identity'
 import { usePear } from '@/hooks/use-pear'
 import { useColorScheme } from '@/hooks/use-color-scheme'
 import { encodeQRData, topicFromPublicKey } from '@/lib/qr'
 import {
-  createSignedCredential, verifyCredential, verifyNonceSignature,
-  signNonce, generateNonce, hashCredential,
+  createSignedCredential, verifyCredential, createCredentialRequest,
 } from '@/lib/crypto'
-import {
-  createCredentialRequest, parseMessage, createCredentialIssuedMessage,
-  createVerificationChallenge, createVerificationProof, createVerificationResult,
-} from '@/lib/messaging'
 import type { SignedCredential } from '@/lib/crypto'
+import {
+  parseMessage, createCredentialIssuedMessage,
+} from '@/lib/messaging'
 
-type Role = null | 'holder' | 'issuer' | 'verifier'
-
-const QR_SIZE = Math.min(Dimensions.get('window').width - 80, 300)
+type Role = null | 'issuer' | 'holder'
 
 export default function IdentityScreen() {
   const dark = useColorScheme() === 'dark'
-  const { identity, loading, error: identityError, createIdentity, deleteIdentity, credentials, storeCredential } = useIdentity()
+  const { identity, error: identityError, createIdentity, deleteIdentity } = useIdentity()
   const pear = usePear()
 
   const [role, setRole] = useState<Role>(null)
   const [name, setName] = useState('')
   const [dob, setDob] = useState('')
   const [creating, setCreating] = useState(false)
-  const [claimToIssue, setClaimToIssue] = useState('age_over_18')
   const [credentialStatus, setCredentialStatus] = useState<string | null>(null)
-  const [verificationStatus, setVerificationStatus] = useState<string | null>(null)
-  const [verificationChallenge, setVerificationChallenge] = useState<string | null>(null)
+  const [issuerQRData, setIssuerQRData] = useState<string | null>(null)
+  const [holderQRData, setHolderQRData] = useState<string | null>(null)
   const [receivedCredentials, setReceivedCredentials] = useState<SignedCredential[]>([])
-  const [issuerQRUri, setIssuerQRUri] = useState<string | null>(null)
-  const [holderQRUri, setHolderQRUri] = useState<string | null>(null)
-  const [verifierQRUri, setVerifierQRUri] = useState<string | null>(null)
 
   const bg = dark ? '#0d1117' : '#f5f7fa'
   const fg = dark ? '#e6edf3' : '#1a1a2e'
@@ -46,50 +38,34 @@ export default function IdentityScreen() {
   const inputBg = dark ? '#161b22' : '#ffffff'
   const border = dark ? '#30363d' : '#d0d7de'
 
-  // Generate QR code as data URI
-  const generateQRUri = useCallback(async (data: string) => {
-    try {
-      const uri = await QRCode.toDataURL(data, { width: 300 })
-      return uri
-    } catch (err) {
-      console.error('QR generation error:', err)
-      return null
-    }
-  }, [])
 
-  // Generate QR codes when role changes
+  // Generate issuer QR code when role changes
   useEffect(() => {
-    if (!identity) return
-    if (role === 'issuer') {
-      const issuerTopic = topicFromPublicKey(identity.publicKey)
-      const qrData = encodeQRData({
-        type: 'issuer',
-        topic: issuerTopic,
-        publicKey: identity.publicKey,
-        timestamp: new Date().toISOString(),
-      })
-      generateQRUri(qrData).then(setIssuerQRUri)
-    } else if (role === 'holder') {
-      const holderTopic = topicFromPublicKey(identity.publicKey)
-      const qrData = encodeQRData({
-        type: 'holder',
-        topic: holderTopic,
-        publicKey: identity.publicKey,
-        timestamp: new Date().toISOString(),
-      })
-      generateQRUri(qrData).then(setHolderQRUri)
-    } else if (role === 'verifier') {
-      const verifierTopic = 'verifier_' + Math.random().toString(36).slice(2, 10)
-      const qrData = encodeQRData({
-        type: 'verifier',
-        topic: verifierTopic,
-        timestamp: new Date().toISOString(),
-      })
-      generateQRUri(qrData).then(setVerifierQRUri)
-    }
-  }, [role, identity, generateQRUri])
+    if (!identity || role !== 'issuer') return
+    const issuerTopic = topicFromPublicKey(identity.publicKey)
+    const qrData = encodeQRData({
+      type: 'issuer',
+      topic: issuerTopic,
+      publicKey: identity.publicKey,
+      timestamp: new Date().toISOString(),
+    })
+    setIssuerQRData(qrData)
+  }, [role, identity])
 
-  // Message handler for incoming P2P messages
+  // Generate holder QR code when role changes
+  useEffect(() => {
+    if (!identity || role !== 'holder') return
+    const holderTopic = topicFromPublicKey(identity.publicKey)
+    const qrData = encodeQRData({
+      type: 'holder',
+      topic: holderTopic,
+      publicKey: identity.publicKey,
+      timestamp: new Date().toISOString(),
+    })
+    setHolderQRData(qrData)
+  }, [role, identity])
+
+  // Message handler for incoming credential requests and credentials
   useEffect(() => {
     if (!identity || !pear.ready) return
 
@@ -108,63 +84,20 @@ export default function IdentityScreen() {
           const response = createCredentialIssuedMessage(credential, identity.publicKey)
           pear.sendToPeer(peerId, response)
           setCredentialStatus('✓ Credential issued')
-        }
-
-        if (role === 'holder' && msg.type === 'CREDENTIAL_ISSUED') {
+        } else if (role === 'holder' && msg.type === 'CREDENTIAL_ISSUED') {
           const cred = (msg.payload as { credential: SignedCredential }).credential
           if (verifyCredential(cred)) {
-            storeCredential(cred)
             setReceivedCredentials([...receivedCredentials, cred])
             setCredentialStatus('✓ Credential received and verified')
           } else {
             setCredentialStatus('✗ Credential verification failed')
           }
         }
-
-        if (role === 'verifier' && msg.type === 'VERIFICATION_PROOF') {
-          const proof = msg.payload as {
-            credential: SignedCredential
-            holderPublicKey: string
-            nonceSignature: string
-            challenge: string
-          }
-          const isCredentialValid = verifyCredential(proof.credential)
-          const isProofValid = verifyNonceSignature(
-            proof.challenge,
-            proof.nonceSignature,
-            proof.holderPublicKey
-          )
-          const isValid = isCredentialValid && isProofValid
-          const result = createVerificationResult(isValid, hashCredential(proof.credential))
-          pear.sendToPeer(peerId, result)
-          setVerificationStatus(isValid ? '✓ Credential verified' : '✗ Verification failed')
-        }
-
-        if (role === 'holder' && msg.type === 'VERIFICATION_CHALLENGE') {
-          const challenge = (msg.payload as { nonce: string }).nonce
-          setVerificationChallenge(challenge)
-          if (receivedCredentials.length > 0) {
-            const credential = receivedCredentials[0]
-            const proofMsg = createVerificationProof(
-              credential,
-              identity.publicKey,
-              identity.secretKey,
-              challenge
-            )
-            pear.sendToPeer(peerId, proofMsg)
-            setVerificationStatus('✓ Proof sent')
-          }
-        }
-
-        if (msg.type === 'VERIFICATION_RESULT') {
-          const result = msg.payload as { valid: boolean; reason?: string }
-          setVerificationStatus(result.valid ? '✓ Verification passed' : '✗ Verification failed')
-        }
       } catch (err) {
         console.error('Message handler error:', err)
       }
     })
-  }, [role, identity, pear, credentials, receivedCredentials])
+  }, [role, identity, pear, receivedCredentials])
 
   // Create identity
   const handleCreateIdentity = useCallback(async () => {
@@ -180,7 +113,6 @@ export default function IdentityScreen() {
     }
   }, [name, dob, createIdentity])
 
-  // ISSUER: Join topic to listen for requests
   const handleIssuerStart = useCallback(() => {
     if (!identity) return
     const topic = topicFromPublicKey(identity.publicKey)
@@ -188,35 +120,15 @@ export default function IdentityScreen() {
     setCredentialStatus('Listening for requests...')
   }, [identity, pear])
 
-  // HOLDER: Scan issuer QR (simulated - would use camera in real app)
-  const handleHolderRequestCredential = useCallback(() => {
+  const handleRequestCredential = useCallback(() => {
     if (!identity || !pear.currentTopic) return
     setCredentialStatus('Requesting credential...')
     const msg = createCredentialRequest(identity.publicKey)
-    // Send to all connected peers on the issuer's topic
     pear.peers.forEach((peer) => {
       pear.sendToPeer(peer.peerId, msg)
     })
   }, [identity, pear])
 
-  // VERIFIER: Generate discovery topic
-  const handleVerifierStart = useCallback(() => {
-    if (!pear.currentTopic) {
-      setVerificationStatus('No verification topic active')
-      return
-    }
-    setVerificationStatus('Waiting for credentials...')
-    // When peers connect, send them a verification challenge
-    pear.peers.forEach((peer) => {
-      const challenge = createVerificationChallenge(hashCredential({
-        claim: claimToIssue,
-        issuerPublicKey: '',
-        signature: '',
-        timestamp: new Date().toISOString(),
-      }))
-      pear.sendToPeer(peer.peerId, challenge)
-    })
-  }, [pear, claimToIssue])
 
   // Show role selector if no role chosen
   if (!role) {
@@ -275,15 +187,7 @@ export default function IdentityScreen() {
               onPress={() => setRole('holder')}>
               <Text style={[styles.roleIcon]}>💳</Text>
               <Text style={[styles.roleTitle, { color: '#2196F3' }]}>HOLDER</Text>
-              <Text style={[styles.roleDesc, { color: sub }]}>Request & store credentials</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.roleButton, { borderColor: '#FF9800', backgroundColor: '#FF9800' + '20' }]}
-              onPress={() => setRole('verifier')}>
-              <Text style={[styles.roleIcon]}>✅</Text>
-              <Text style={[styles.roleTitle, { color: '#FF9800' }]}>VERIFIER</Text>
-              <Text style={[styles.roleDesc, { color: sub }]}>Verify credentials</Text>
+              <Text style={[styles.roleDesc, { color: sub }]}>Receive & manage credentials</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -329,8 +233,8 @@ export default function IdentityScreen() {
           <Text style={[styles.desc, { color: sub }]}>Users scan this to request credentials</Text>
 
           <View style={[styles.qrContainer, { backgroundColor: '#fff', borderColor: border }]}>
-            {issuerQRUri ? (
-              <Image source={{ uri: issuerQRUri }} style={{ width: 300, height: 300 }} />
+            {issuerQRData ? (
+              <QRCode value={issuerQRData} size={300} />
             ) : (
               <ActivityIndicator color="#0a7ea4" />
             )}
@@ -362,7 +266,7 @@ export default function IdentityScreen() {
     return (
       <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={styles.container}>
         <TouchableOpacity onPress={() => setRole(null)} style={{ marginBottom: 12 }}>
-          <Text style={[styles.backBtn, { color: '#0a7ea4' }]}>← Back</Text>
+          <Text style={[styles.backBtn, { color: '#2196F3' }]}>← Back</Text>
         </TouchableOpacity>
 
         <Text style={[styles.heading, { color: fg }]}>💳 HOLDER</Text>
@@ -370,19 +274,17 @@ export default function IdentityScreen() {
 
         <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
           <Text style={[styles.cardTitle, { color: fg }]}>Your Credential QR</Text>
-          <Text style={[styles.desc, { color: sub }]}>Verifiers scan this to validate your credentials</Text>
+          <Text style={[styles.desc, { color: sub }]}>Others scan this to validate your credentials</Text>
 
           <View style={[styles.qrContainer, { backgroundColor: '#fff', borderColor: border }]}>
-            {holderQRUri ? (
-              <Image source={{ uri: holderQRUri }} style={{ width: 300, height: 300 }} />
+            {holderQRData ? (
+              <QRCode value={holderQRData} size={300} />
             ) : (
               <ActivityIndicator color="#2196F3" />
             )}
           </View>
 
-          <TouchableOpacity
-            style={styles.btnPrimary}
-            onPress={handleHolderRequestCredential}>
+          <TouchableOpacity style={[styles.btnPrimary, { backgroundColor: '#2196F3' }]} onPress={handleRequestCredential}>
             <Text style={styles.btnText}>Request Credential</Text>
           </TouchableOpacity>
 
@@ -392,50 +294,15 @@ export default function IdentityScreen() {
 
           {receivedCredentials.length > 0 && (
             <>
-              <Text style={[styles.label, { color: sub, marginTop: 16 }]}>Stored Credentials ({receivedCredentials.length})</Text>
+              <Text style={[styles.label, { color: sub, marginTop: 16 }]}>
+                Stored Credentials ({receivedCredentials.length})
+              </Text>
               {receivedCredentials.map((cred, i) => (
                 <Text key={i} style={[styles.peerItem, { color: fg }]}>
                   • {cred.claim}
                 </Text>
               ))}
             </>
-          )}
-
-          <Text style={[styles.label, { color: sub, marginTop: 12 }]}>Connected Peers: {pear.peers.length}</Text>
-        </View>
-      </ScrollView>
-    )
-  }
-
-  // VERIFIER SCREEN
-  if (role === 'verifier') {
-    return (
-      <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={styles.container}>
-        <TouchableOpacity onPress={() => setRole(null)} style={{ marginBottom: 12 }}>
-          <Text style={[styles.backBtn, { color: '#0a7ea4' }]}>← Back</Text>
-        </TouchableOpacity>
-
-        <Text style={[styles.heading, { color: fg }]}>✅ VERIFIER</Text>
-        <Text style={[styles.subheading, { color: sub }]}>Verify credentials</Text>
-
-        <View style={[styles.card, { backgroundColor: inputBg, borderColor: border }]}>
-          <Text style={[styles.cardTitle, { color: fg }]}>Verification QR</Text>
-          <Text style={[styles.desc, { color: sub }]}>Users present their credential to scan this</Text>
-
-          <View style={[styles.qrContainer, { backgroundColor: '#fff', borderColor: border }]}>
-            {verifierQRUri ? (
-              <Image source={{ uri: verifierQRUri }} style={{ width: 300, height: 300 }} />
-            ) : (
-              <ActivityIndicator color="#FF9800" />
-            )}
-          </View>
-
-          <TouchableOpacity style={styles.btnPrimary} onPress={handleVerifierStart}>
-            <Text style={styles.btnText}>Start Verification</Text>
-          </TouchableOpacity>
-
-          {verificationStatus && (
-            <Text style={[styles.label, { color: '#FF9800', marginTop: 12 }]}>{verificationStatus}</Text>
           )}
 
           <Text style={[styles.label, { color: sub, marginTop: 12 }]}>Connected Peers: {pear.peers.length}</Text>
