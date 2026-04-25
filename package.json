@@ -8,10 +8,14 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "pack:worklet:android": "bare-pack --host android --linked -o worklet/bundle.js worklet/src/index.js",
+    "pack:worklet:ios": "bare-pack --host ios --linked -o worklet/bundle.ios.js worklet/src/index.js",
+    "pack:worklet": "npm run pack:worklet:android && npm run pack:worklet:ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "^3.0.2",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
@@ -28,6 +32,8 @@
     "expo-symbols": "~1.0.8",
     "expo-system-ui": "~6.0.9",
     "expo-web-browser": "~15.0.10",
+    "hypercore-crypto": "^3.6.1",
+    "hyperswarm": "^4.17.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
@@ -41,6 +47,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "bare-pack": "^2.0.1",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
