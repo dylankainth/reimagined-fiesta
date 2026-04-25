@@ -25,11 +25,11 @@ export default function VerifierScreen() {
   const [verificationStatus, setVerificationStatus] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
 
-  const bg = dark ? '#0d1117' : '#f5f7fa'
-  const fg = dark ? '#e6edf3' : '#1a1a2e'
+  const bg = dark ? '#0d1117' : '#ffffff'
+  const fg = dark ? '#e6edf3' : '#000000'
   const sub = dark ? '#8b949e' : '#6e7681'
   const inputBg = dark ? '#161b22' : '#ffffff'
-  const border = dark ? '#30363d' : '#d0d7de'
+  const border = dark ? '#30363d' : '#fed7aa'
 
   useEffect(() => {
     requestPermission()
@@ -135,7 +135,7 @@ export default function VerifierScreen() {
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[styles.btnPrimary, { backgroundColor: '#666' }]}
+            style={[styles.btnPrimary, { backgroundColor: '#6e7681' }]}
             onPress={() => {
               setIsScanning(false)
               setScanned(false)
@@ -157,7 +157,7 @@ export default function VerifierScreen() {
         <Text style={[styles.desc, { color: sub }]}>Hold your camera up to scan a holder's credential QR code</Text>
 
         <TouchableOpacity
-          style={[styles.btnPrimary, { backgroundColor: '#FF9800', marginTop: 12 }]}
+          style={[styles.btnPrimary, { marginTop: 12 }]}
           onPress={() => {
             setIsScanning(true)
             setScanned(false)
@@ -166,7 +166,7 @@ export default function VerifierScreen() {
         </TouchableOpacity>
 
         {verificationStatus && (
-          <Text style={[styles.label, { color: '#FF9800', marginTop: 16, textAlign: 'center' }]}>{verificationStatus}</Text>
+          <Text style={[styles.label, { color: '#ea580c', marginTop: 16, textAlign: 'center' }]}>{verificationStatus}</Text>
         )}
 
         <Text style={[styles.label, { color: sub, marginTop: 20 }]}>Connected Peers: {pear.peers.length}</Text>
@@ -197,6 +197,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   peerItem: { fontSize: 13, marginBottom: 6, paddingLeft: 8 },
-  btnPrimary: { backgroundColor: '#FF9800', borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 12 },
+  btnPrimary: { backgroundColor: '#ea580c', borderRadius: 9999, padding: 14, alignItems: 'center', marginBottom: 12 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 })

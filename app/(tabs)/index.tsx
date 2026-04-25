@@ -32,11 +32,11 @@ export default function IdentityScreen() {
   const [holderQRData, setHolderQRData] = useState<string | null>(null)
   const [receivedCredentials, setReceivedCredentials] = useState<SignedCredential[]>([])
 
-  const bg = dark ? '#0d1117' : '#f5f7fa'
-  const fg = dark ? '#e6edf3' : '#1a1a2e'
+  const bg = dark ? '#0d1117' : '#ffffff'
+  const fg = dark ? '#e6edf3' : '#000000'
   const sub = dark ? '#8b949e' : '#6e7681'
   const inputBg = dark ? '#161b22' : '#ffffff'
-  const border = dark ? '#30363d' : '#d0d7de'
+  const border = dark ? '#30363d' : '#fed7aa'
 
 
   // Generate issuer QR code when role changes
@@ -175,18 +175,18 @@ export default function IdentityScreen() {
             <Text style={[styles.subheading, { color: sub }]}>{identity.publicKey.slice(0, 16)}...</Text>
 
             <TouchableOpacity
-              style={[styles.roleButton, { borderColor: '#4CAF50', backgroundColor: '#4CAF50' + '20' }]}
+              style={[styles.roleButton, { borderColor: '#ea580c', backgroundColor: '#fff7ed' }]}
               onPress={() => setRole('issuer')}>
               <Text style={[styles.roleIcon]}>🏛️</Text>
-              <Text style={[styles.roleTitle, { color: '#4CAF50' }]}>ISSUER</Text>
+              <Text style={[styles.roleTitle, { color: '#ea580c' }]}>ISSUER</Text>
               <Text style={[styles.roleDesc, { color: sub }]}>Issue credentials</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.roleButton, { borderColor: '#2196F3', backgroundColor: '#2196F3' + '20' }]}
+              style={[styles.roleButton, { borderColor: '#fed7aa', backgroundColor: '#fff7ed' }]}
               onPress={() => setRole('holder')}>
               <Text style={[styles.roleIcon]}>💳</Text>
-              <Text style={[styles.roleTitle, { color: '#2196F3' }]}>HOLDER</Text>
+              <Text style={[styles.roleTitle, { color: '#c2410c' }]}>HOLDER</Text>
               <Text style={[styles.roleDesc, { color: sub }]}>Receive & manage credentials</Text>
             </TouchableOpacity>
 
@@ -222,7 +222,7 @@ export default function IdentityScreen() {
     return (
       <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={styles.container}>
         <TouchableOpacity onPress={() => setRole(null)} style={{ marginBottom: 12 }}>
-          <Text style={[styles.backBtn, { color: '#0a7ea4' }]}>← Back</Text>
+          <Text style={[styles.backBtn, { color: '#ea580c' }]}>← Back</Text>
         </TouchableOpacity>
 
         <Text style={[styles.heading, { color: fg }]}>🏛️ ISSUER</Text>
@@ -236,7 +236,7 @@ export default function IdentityScreen() {
             {issuerQRData ? (
               <QRCode value={issuerQRData} size={300} />
             ) : (
-              <ActivityIndicator color="#0a7ea4" />
+              <ActivityIndicator color="#ea580c" />
             )}
           </View>
 
@@ -247,7 +247,7 @@ export default function IdentityScreen() {
           </TouchableOpacity>
 
           {credentialStatus && (
-            <Text style={[styles.label, { color: '#4CAF50', marginTop: 12 }]}>{credentialStatus}</Text>
+            <Text style={[styles.label, { color: '#ea580c', marginTop: 12 }]}>{credentialStatus}</Text>
           )}
 
           <Text style={[styles.label, { color: sub, marginTop: 12 }]}>Connected Peers: {pear.peers.length}</Text>
@@ -266,7 +266,7 @@ export default function IdentityScreen() {
     return (
       <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={styles.container}>
         <TouchableOpacity onPress={() => setRole(null)} style={{ marginBottom: 12 }}>
-          <Text style={[styles.backBtn, { color: '#2196F3' }]}>← Back</Text>
+          <Text style={[styles.backBtn, { color: '#ea580c' }]}>← Back</Text>
         </TouchableOpacity>
 
         <Text style={[styles.heading, { color: fg }]}>💳 HOLDER</Text>
@@ -284,12 +284,12 @@ export default function IdentityScreen() {
             )}
           </View>
 
-          <TouchableOpacity style={[styles.btnPrimary, { backgroundColor: '#2196F3' }]} onPress={handleRequestCredential}>
+          <TouchableOpacity style={styles.btnPrimary} onPress={handleRequestCredential}>
             <Text style={styles.btnText}>Request Credential</Text>
           </TouchableOpacity>
 
           {credentialStatus && (
-            <Text style={[styles.label, { color: '#2196F3', marginTop: 12 }]}>{credentialStatus}</Text>
+            <Text style={[styles.label, { color: '#ea580c', marginTop: 12 }]}>{credentialStatus}</Text>
           )}
 
           {receivedCredentials.length > 0 && (
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
 
   peerItem: { fontSize: 13, marginBottom: 6, paddingLeft: 8 },
 
-  btnPrimary: { backgroundColor: '#0a7ea4', borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 12 },
+  btnPrimary: { backgroundColor: '#ea580c', borderRadius: 9999, padding: 14, alignItems: 'center', marginBottom: 12 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
   btnDanger: { borderWidth: 1, borderColor: '#da3633', borderRadius: 12, padding: 12, alignItems: 'center' },

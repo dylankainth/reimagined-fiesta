@@ -20,6 +20,18 @@
   width: min(56rem, 100%);
 }
 
+.landing-hero-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.landing-hero-icon svg {
+  width: clamp(5.5rem, 20vmin, 9rem);
+  height: auto;
+}
+
 .landing-title {
   margin: 0;
   font-size: clamp(2rem, 5vw, 3.35rem);
