@@ -47,6 +47,7 @@ const providers      = new Map()  // peerId → { send, conn, advertise }
 const logLines       = []
 let   currentJob     = null       // { ...JOB, peerId, providerId, acceptedAt, logPublicKey, score, rep, failedPeers }
 let   activeJobConfig = { ...JOB } // preserved across reconnect/failover cycles
+let   lastJobConfig  = { ...JOB } // preserved across failover cycles
 let   jobStatus  = JOB_STATUS.PENDING
 let   totalPaid  = 0
 let   tickIndex  = 0
@@ -94,6 +95,9 @@ function scoreProvider(adv) {
 }
 
 // ─── Find best provider and submit job ────────────────────────────────────────
+let failoverRetries = 0
+const MAX_FAILOVER_RETRIES = 3
+
 function findAndSubmitJob() {
   clearTimeout(failoverTimer)
   failoverTimer = null
@@ -120,13 +124,20 @@ function findAndSubmitJob() {
   }
 
   if (bestPeerId === null) {
-    log('⚠  No providers available — waiting for new peers...')
-    failoverTimer = setTimeout(() => {
-      if (jobStatus === JOB_STATUS.PENDING) findAndSubmitJob()
-    }, 10_000)
+    if (failoverRetries < MAX_FAILOVER_RETRIES) {
+      failoverRetries++
+      log(`⚠  No providers available for failover (attempt ${failoverRetries}/${MAX_FAILOVER_RETRIES}) — retrying in 5s...`)
+      failoverTimer = setTimeout(() => {
+        if (jobStatus === JOB_STATUS.PENDING) findAndSubmitJob()
+      }, 5_000)
+    } else {
+      log(`⚠  No providers available for failover — giving up after ${MAX_FAILOVER_RETRIES} retries`)
+      jobStatus = JOB_STATUS.CANCELLED
+    }
     return
   }
 
+  failoverRetries = 0
   const p   = providers.get(bestPeerId)
   const adv = p.advertise
 
@@ -141,8 +152,9 @@ function findAndSubmitJob() {
   lastTickAmount   = 0
 
   jobStatus  = JOB_STATUS.MATCHED
+  lastJobConfig = { ...activeJobConfig }
   currentJob = {
-    ...activeJobConfig,
+    ...lastJobConfig,
     peerId:      bestPeerId,
     providerId:  adv.providerId,
     score:       bestScore,
@@ -150,9 +162,9 @@ function findAndSubmitJob() {
     failedPeers,
   }
 
-  log(`Submitting job ${activeJobConfig.jobId.slice(0, 8)} to ${adv.providerId} ` +
+  log(`📤 Submitting job ${lastJobConfig.jobId.slice(0, 8)} to ${adv.providerId} ` +
       `(score: ${bestScore.toFixed(1)}, rep: ${adv.completedJobs || 0} jobs)`)
-  p.send(makeMsg(MSG.JOB_REQUEST, activeJobConfig))
+  p.send(makeMsg(MSG.JOB_REQUEST, lastJobConfig))
 }
 
 // ─── Connection handler ───────────────────────────────────────────────────────
@@ -166,18 +178,6 @@ swarm.on('connection', (conn) => {
     onclose() {
       providers.delete(peerId)
       log(`Peer dropped: ${peerId}`)
-
-      if (currentJob?.peerId === peerId &&
-          (jobStatus === JOB_STATUS.RUNNING || jobStatus === JOB_STATUS.MATCHED)) {
-        log(`⚠  Provider ${peerId} disconnected — seeking failover...`)
-        channelStatus = 'PAUSED'
-        log(`CHANNEL_PAUSE — provider dropped (paid $${totalPaid.toFixed(6)} so far)`)
-        stopPaymentStream()
-        stopWatchdog()
-        currentJob.failedPeers.add(peerId)
-        jobStatus  = JOB_STATUS.PENDING
-        findAndSubmitJob()
-      }
     },
   })
 
@@ -194,6 +194,29 @@ swarm.on('connection', (conn) => {
 
   const send = (data) => { try { msg.send(encode(data)) } catch {} }
   providers.set(peerId, { send, conn, advertise: null })
+
+  // Handle TCP-level connection close (more reliable than channel.onclose)
+  conn.on('close', () => {
+    providers.delete(peerId)
+    log(`⚠  TCP connection closed: ${peerId}`)
+
+    if (currentJob?.peerId === peerId &&
+        (jobStatus === JOB_STATUS.RUNNING || jobStatus === JOB_STATUS.MATCHED)) {
+      log(`⚠  Provider ${currentJob.providerId} disconnected — seeking failover...`)
+      channelStatus = 'PAUSED'
+      log(`CHANNEL_PAUSE — provider dropped (paid $${totalPaid.toFixed(6)} so far)`)
+
+      clearInterval(payTimer)
+      payTimer = null
+      clearInterval(watchdogTimer)
+      watchdogTimer = null
+
+      currentJob.failedPeers.add(peerId)
+      jobStatus = JOB_STATUS.PENDING
+      failoverRetries = 0
+      findAndSubmitJob()
+    }
+  })
 })
 
 swarm.join(topicBuf, { server: false, client: true })

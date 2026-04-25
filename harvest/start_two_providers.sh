@@ -1,31 +1,41 @@
 #!/bin/bash
-# Starts two provider instances with isolated storage
-NODE=/home/dylan/.nvm/versions/node/v22.22.2/bin/node
-REPO=/home/dylan/hackupc-26/harvest
 
-# Clear old storage
-rm -rf $REPO/provider/provider-storage-1
-rm -rf $REPO/provider/provider-storage-2
+# Get nvm node binary
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm use 22 --silent
 
-# Start provider 1 with storage path override
-PROVIDER_STORAGE=$REPO/provider/provider-storage-1 \
-  $NODE $REPO/provider/index.mjs > /tmp/prov1.log 2>&1 &
-P1=$!
-echo "Provider 1 PID: $P1"
+NODE=$(which node)
+REPO=$(cd "$(dirname "$0")" && pwd)
 
-sleep 2
+echo "Using Node: $NODE"
+echo "Repo: $REPO"
 
-# Start provider 2 with storage path override
-PROVIDER_STORAGE=$REPO/provider/provider-storage-2 \
-  $NODE $REPO/provider/index.mjs > /tmp/prov2.log 2>&1 &
-P2=$!
-echo "Provider 2 PID: $P2"
+# Clean up old storage
+rm -rf "$REPO/provider/provider-storage-1"
+rm -rf "$REPO/provider/provider-storage-2"
 
-echo $P1 > /tmp/harvest_prov1.pid
-echo $P2 > /tmp/harvest_prov2.pid
+# Start Provider 1
+PROVIDER_STORAGE="$REPO/provider/provider-storage-1" \
+  "$NODE" "$REPO/provider/index.mjs" > /tmp/prov1.log 2>&1 &
+PID1=$!
+echo $PID1 > /tmp/harvest_prov1.pid
+echo "Provider 1 started (PID: $PID1)"
+
+sleep 3
+
+# Start Provider 2
+PROVIDER_STORAGE="$REPO/provider/provider-storage-2" \
+  "$NODE" "$REPO/provider/index.mjs" > /tmp/prov2.log 2>&1 &
+PID2=$!
+echo $PID2 > /tmp/harvest_prov2.pid
+echo "Provider 2 started (PID: $PID2)"
+
 echo ""
-echo "Both providers running. Start requester in another terminal:"
-echo "  cd $REPO/requester && node index.mjs"
+echo "Both providers running."
 echo ""
-echo "To kill provider 1 mid-demo: kill -9 $P1"
-echo "  (or: kill -9 \$(cat /tmp/harvest_prov1.pid))"
+echo "To kill Provider 1:  kill -9 $(cat /tmp/harvest_prov1.pid)"
+echo "To kill Provider 2:  kill -9 $(cat /tmp/harvest_prov2.pid)"
+echo ""
+echo "Provider 1 logs: tail -f /tmp/prov1.log"
+echo "Provider 2 logs: tail -f /tmp/prov2.log"
