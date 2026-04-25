@@ -1,10 +1,11 @@
 /** @typedef {import('pear-interface')} */ /* global Pear */
+import process from 'bare-process'
 import Hyperswarm from 'hyperswarm'
 import Corestore from 'corestore'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import b4a from 'b4a'
-import { createHash, randomBytes } from 'crypto'
+import { createHash, randomBytes } from 'bare-crypto'
 import {
   MSG, JOB_STATUS, PAYMENT_INTERVAL,
   HARVEST_TOPIC, makeMsg, encode, decode
@@ -43,9 +44,11 @@ const teardown   = (fn) => globalThis.Pear ? globalThis.Pear.teardown(fn) : proc
 const WATCHDOG_TIMEOUT = 2.5 * PAYMENT_INTERVAL
 
 // ─── Runtime state ────────────────────────────────────────────────────────────
-const providers  = new Map()  // peerId → { send, conn, advertise }
-const logLines   = []
-let   currentJob = null       // { ...JOB, peerId, providerId, acceptedAt, logPublicKey, score, rep, failedPeers }
+const providers      = new Map()  // peerId → { send, conn, advertise }
+const logLines       = []
+let   currentJob     = null       // { ...JOB, peerId, providerId, acceptedAt, logPublicKey, score, rep, failedPeers }
+let   activeJobConfig = { ...JOB } // preserved across reconnect/failover cycles
+let   lastJobConfig  = { ...JOB } // preserved across failover cycles
 let   jobStatus  = JOB_STATUS.PENDING
 let   totalPaid  = 0
 let   tickIndex  = 0
@@ -60,6 +63,7 @@ let   lastProgressLine = null
 let   channelStatus    = 'NONE'   // NONE | OPEN | PAUSED | CLOSED
 let   paymentStartedAt = null
 let   lastTickAmount   = 0
+let   jobCompleteData  = null
 
 function log(line) {
   const ts = new Date().toISOString().slice(11, 23)
@@ -68,7 +72,7 @@ function log(line) {
 }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
-const storagePath = pearConfig?.storage ?? './requester-storage'
+const storagePath = argv.storage ?? pearConfig?.storage ?? './requester-storage'
 const store = new Corestore(storagePath)
 await store.ready()
 log('Corestore ready')
@@ -92,6 +96,9 @@ function scoreProvider(adv) {
 }
 
 // ─── Find best provider and submit job ────────────────────────────────────────
+let failoverRetries = 0
+const MAX_FAILOVER_RETRIES = 3
+
 function findAndSubmitJob() {
   clearTimeout(failoverTimer)
   failoverTimer = null
@@ -118,13 +125,20 @@ function findAndSubmitJob() {
   }
 
   if (bestPeerId === null) {
-    log('⚠  No providers available — waiting for new peers...')
-    failoverTimer = setTimeout(() => {
-      if (jobStatus === JOB_STATUS.PENDING) findAndSubmitJob()
-    }, 10_000)
+    if (failoverRetries < MAX_FAILOVER_RETRIES) {
+      failoverRetries++
+      log(`⚠  No providers available for failover (attempt ${failoverRetries}/${MAX_FAILOVER_RETRIES}) — retrying in 5s...`)
+      failoverTimer = setTimeout(() => {
+        if (jobStatus === JOB_STATUS.PENDING) findAndSubmitJob()
+      }, 5_000)
+    } else {
+      log(`⚠  No providers available for failover — giving up after ${MAX_FAILOVER_RETRIES} retries`)
+      jobStatus = JOB_STATUS.CANCELLED
+    }
     return
   }
 
+  failoverRetries = 0
   const p   = providers.get(bestPeerId)
   const adv = p.advertise
 
@@ -139,8 +153,9 @@ function findAndSubmitJob() {
   lastTickAmount   = 0
 
   jobStatus  = JOB_STATUS.MATCHED
+  lastJobConfig = { ...activeJobConfig }
   currentJob = {
-    ...JOB,
+    ...lastJobConfig,
     peerId:      bestPeerId,
     providerId:  adv.providerId,
     score:       bestScore,
@@ -148,9 +163,9 @@ function findAndSubmitJob() {
     failedPeers,
   }
 
-  log(`Submitting job ${JOB.jobId.slice(0, 8)} to ${adv.providerId} ` +
+  log(`📤 Submitting job ${lastJobConfig.jobId.slice(0, 8)} to ${adv.providerId} ` +
       `(score: ${bestScore.toFixed(1)}, rep: ${adv.completedJobs || 0} jobs)`)
-  p.send(makeMsg(MSG.JOB_REQUEST, JOB))
+  p.send(makeMsg(MSG.JOB_REQUEST, lastJobConfig))
 }
 
 // ─── Connection handler ───────────────────────────────────────────────────────
@@ -164,18 +179,6 @@ swarm.on('connection', (conn) => {
     onclose() {
       providers.delete(peerId)
       log(`Peer dropped: ${peerId}`)
-
-      if (currentJob?.peerId === peerId &&
-          (jobStatus === JOB_STATUS.RUNNING || jobStatus === JOB_STATUS.MATCHED)) {
-        log(`⚠  Provider ${peerId} disconnected — seeking failover...`)
-        channelStatus = 'PAUSED'
-        log(`CHANNEL_PAUSE — provider dropped (paid $${totalPaid.toFixed(6)} so far)`)
-        stopPaymentStream()
-        stopWatchdog()
-        currentJob.failedPeers.add(peerId)
-        jobStatus  = JOB_STATUS.PENDING
-        findAndSubmitJob()
-      }
     },
   })
 
@@ -192,6 +195,29 @@ swarm.on('connection', (conn) => {
 
   const send = (data) => { try { msg.send(encode(data)) } catch {} }
   providers.set(peerId, { send, conn, advertise: null })
+
+  // Handle TCP-level connection close (more reliable than channel.onclose)
+  conn.on('close', () => {
+    providers.delete(peerId)
+    log(`⚠  TCP connection closed: ${peerId}`)
+
+    if (currentJob?.peerId === peerId &&
+        (jobStatus === JOB_STATUS.RUNNING || jobStatus === JOB_STATUS.MATCHED)) {
+      log(`⚠  Provider ${currentJob.providerId} disconnected — seeking failover...`)
+      channelStatus = 'PAUSED'
+      log(`CHANNEL_PAUSE — provider dropped (paid $${totalPaid.toFixed(6)} so far)`)
+
+      clearInterval(payTimer)
+      payTimer = null
+      clearInterval(watchdogTimer)
+      watchdogTimer = null
+
+      currentJob.failedPeers.add(peerId)
+      jobStatus = JOB_STATUS.PENDING
+      failoverRetries = 0
+      findAndSubmitJob()
+    }
+  })
 })
 
 swarm.join(topicBuf, { server: false, client: true })
@@ -295,6 +321,8 @@ function handleJobComplete(data) {
   stopPaymentStream()
   stopWatchdog()
 
+  const duration = currentJob?.acceptedAt ? Math.round((Date.now() - currentJob.acceptedAt) / 1000) : 0
+
   // Final settlement — close the payment channel
   const prov = providers.get(currentJob?.peerId)
   if (prov) {
@@ -304,16 +332,25 @@ function handleJobComplete(data) {
   log(`CHANNEL_CLOSE — final settlement $${totalPaid.toFixed(6)} USDT`)
   log(`JOB_COMPLETE totalCost=$${totalCost.toFixed(6)} totalPaid=$${totalPaid.toFixed(6)}`)
 
-  console.clear()
-  console.log('╔════════════════════════════════════════════════╗')
-  console.log('║             JOB COMPLETED                      ║')
-  console.log('╚════════════════════════════════════════════════╝')
-  console.log(`  Job ID      : ${jobId}`)
-  console.log(`  Total cost  : $${totalCost.toFixed(6)} USDT`)
-  console.log(`  Total paid  : $${totalPaid.toFixed(6)} USDT`)
-  console.log(`  Log key     : ${logPublicKey}`)
-  console.log('  (Verify execution on the Hypercore tamper-evident log)')
-  console.log('')
+  jobCompleteData = {
+    cost: totalPaid,
+    duration,
+    heartbeats: heartbeatCount,
+    logKey: logPublicKey ?? currentJob?.logPublicKey,
+  }
+
+  if (!process.env.PEAR_STATE_PIPE) {
+    console.clear()
+    console.log('╔════════════════════════════════════════════════╗')
+    console.log('║             JOB COMPLETED                      ║')
+    console.log('╚════════════════════════════════════════════════╝')
+    console.log(`  Job ID      : ${jobId}`)
+    console.log(`  Total cost  : $${totalCost.toFixed(6)} USDT`)
+    console.log(`  Total paid  : $${totalPaid.toFixed(6)} USDT`)
+    console.log(`  Log key     : ${logPublicKey}`)
+    console.log('  (Verify execution on the Hypercore tamper-evident log)')
+    console.log('')
+  }
 }
 
 // ─── JOB_FAILED ──────────────────────────────────────────────────────────────
@@ -405,6 +442,50 @@ function resetWatchdog() {
 function stopWatchdog() {
   clearInterval(watchdogTimer)
   watchdogTimer = null
+}
+
+// ─── State API (used by requester-ui) ────────────────────────────────────────
+export function getState() {
+  const provList = []
+  for (const [peerId, p] of providers) {
+    if (!p.advertise) continue
+    provList.push({
+      peerId,
+      score: scoreProvider(p.advertise),
+      ...p.advertise,
+      active: currentJob?.peerId === peerId,
+    })
+  }
+  provList.sort((a, b) => b.score - a.score)
+
+  const activeJob = currentJob ? {
+    jobId: currentJob.jobId,
+    type:  currentJob.jobType ?? activeJobConfig.jobType,
+    epoch: progressCurrent,
+    total: progressTotal,
+    provider: currentJob.providerId,
+    spent: totalPaid,
+    maxBudget: activeJobConfig.maxBudgetUSDT,
+    hbCount: heartbeatCount,
+    lastHb: lastHeartbeatAt,
+    channelStatus,
+    score: currentJob.score,
+    reputation: currentJob.rep,
+    status: jobStatus,
+    tickIndex,
+    lastTickAmount,
+    paymentStartedAt,
+  } : null
+
+  return {
+    requesterId: SELF_ID,
+    budget: activeJobConfig.maxBudgetUSDT,
+    providers: provList,
+    activeJob,
+    recentLog: logLines.slice(-8),
+    jobComplete: jobCompleteData,
+    jobStatus,
+  }
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -513,8 +594,12 @@ function renderUI() {
   }
 }
 
-setInterval(renderUI, 2_000)
-renderUI()
+if (process.env.PEAR_STATE_PIPE) {
+  setInterval(() => process.stdout.write(JSON.stringify(getState()) + '\n'), 1000)
+} else {
+  setInterval(renderUI, 2_000)
+  renderUI()
+}
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 teardown(async () => {

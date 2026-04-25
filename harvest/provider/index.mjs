@@ -6,10 +6,10 @@ import Protomux from 'protomux'
 import c from 'compact-encoding'
 import b4a from 'b4a'
 import { createHash } from 'crypto'
-import { spawn, execSync } from 'child_process'
+import { spawn } from 'child_process'
+import { execFileSync } from 'child_process'
 import { EventEmitter } from 'events'
 import fs from 'fs'
-import path from 'path'
 import Table from 'cli-table3'
 import {
   MSG, JOB_STATUS, HEARTBEAT_INTERVAL, PAYMENT_INTERVAL,
@@ -61,6 +61,8 @@ function log(line) {
   if (logLines.length > 20) logLines.shift()
 }
 
+let nsjailAvailable = false
+
 // ─── Storage + Hypercore job log ──────────────────────────────────────────────
 const storagePath = process.env.PROVIDER_STORAGE ?? pearConfig?.storage ?? './provider-storage'
 const store   = new Corestore(storagePath)
@@ -71,7 +73,7 @@ log(`Hyperbee ready  logKey=${b4a.toString(jobCore.key, 'hex').slice(0, 16)}…`
 
 // ─── Sandbox detection ────────────────────────────────────────────────────────
 try {
-  execSync('which nsjail', { stdio: 'ignore', timeout: 5000 })
+  execFileSync('which', ['nsjail'], { stdio: 'ignore' })
   nsjailAvailable = true
   log('nsjail found — jobs will run in isolated containers')
 } catch {
@@ -331,7 +333,6 @@ function pythonCodeFor(type) {
 }
 
 // ─── Sandboxed job runner ─────────────────────────────────────────────────────
-let nsjailAvailable = false
 function runInSandbox(jobId, jobType) {
   const script = pythonCodeFor(jobType)
 

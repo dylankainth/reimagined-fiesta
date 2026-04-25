@@ -2,19 +2,29 @@
   "name": "harvest-provider",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.mjs",
+  "main": "index.js",
+  "pear": {
+    "name": "harvest-provider",
+    "type": "terminal"
+  },
   "scripts": {
     "start": "node index.mjs",
     "dev": "node index.mjs"
   },
   "dependencies": {
     "@harvest/shared": "file:../shared",
-    "hyperswarm": "^4.17.0",
+    "b4a": "^1.6.7",
+    "bare-crypto": "^1.13.4",
+    "bare-events": "^2.8.2",
+    "bare-fs": "^4.7.1",
+    "bare-path": "^3.0.0",
+    "bare-process": "^4.4.1",
+    "bare-subprocess": "^6.0.0",
+    "cli-table3": "^0.6.5",
+    "compact-encoding": "^2.15.0",
     "corestore": "^7.9.2",
     "hyperbee": "^2.27.3",
-    "protomux": "^3.10.0",
-    "compact-encoding": "^2.15.0",
-    "b4a": "^1.6.7",
-    "cli-table3": "^0.6.5"
+    "hyperswarm": "^4.17.0",
+    "protomux": "^3.10.0"
   }
 }

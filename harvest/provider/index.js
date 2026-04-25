@@ -1,12 +1,15 @@
 /** @typedef {import('pear-interface')} */ /* global Pear */
+import process from 'bare-process'
 import Hyperswarm from 'hyperswarm'
 import Corestore from 'corestore'
 import Hyperbee from 'hyperbee'
 import Protomux from 'protomux'
 import c from 'compact-encoding'
 import b4a from 'b4a'
-import { createHash } from 'crypto'
-import { spawn } from 'child_process'
+import { createHash } from 'bare-crypto'
+import { spawn, spawnSync } from 'bare-subprocess'
+import EventEmitter from 'bare-events'
+import fs from 'bare-fs'
 import Table from 'cli-table3'
 import {
   MSG, JOB_STATUS, HEARTBEAT_INTERVAL, PAYMENT_INTERVAL,
@@ -58,13 +61,28 @@ function log(line) {
   if (logLines.length > 20) logLines.shift()
 }
 
+let nsjailAvailable = false
+
 // ─── Storage + Hypercore job log ──────────────────────────────────────────────
-const storagePath = pearConfig?.storage ?? process.env.PROVIDER_STORAGE ?? './provider-storage'
+const storagePath = process.env.PROVIDER_STORAGE ?? pearConfig?.storage ?? './provider-storage'
 const store   = new Corestore(storagePath)
 const jobCore = store.get({ name: 'job-log' })
 const bee     = new Hyperbee(jobCore, { keyEncoding: 'utf-8', valueEncoding: 'json' })
 await bee.ready()
 log(`Hyperbee ready  logKey=${b4a.toString(jobCore.key, 'hex').slice(0, 16)}…`)
+
+// ─── Sandbox detection ────────────────────────────────────────────────────────
+try {
+  const result = spawnSync('which', ['nsjail'])
+  if (result.status === 0) {
+    nsjailAvailable = true
+    log('nsjail found — jobs will run in isolated containers')
+  } else {
+    log('⚠  nsjail not found — running without sandbox (dev mode)')
+  }
+} catch {
+  log('⚠  nsjail not found — running without sandbox (dev mode)')
+}
 
 // ─── Load persisted stats ─────────────────────────────────────────────────────
 const statsEntry = await bee.get('provider:stats')
@@ -318,11 +336,65 @@ function pythonCodeFor(type) {
   }
 }
 
+// ─── Sandboxed job runner ─────────────────────────────────────────────────────
+function runInSandbox(jobId, jobType) {
+  const script = pythonCodeFor(jobType)
+
+  if (!nsjailAvailable) {
+    // Fallback: run without sandbox (dev mode)
+    return spawn('python3', ['-c', script], { stdio: ['ignore', 'pipe', 'pipe'] })
+  }
+
+  // Use nsjail for isolation
+  const tmpDir = `/tmp/harvest-${jobId}`
+  const inputDir = `${tmpDir}/input`
+  const outputDir = `${tmpDir}/output`
+
+  try {
+    fs.mkdirSync(inputDir, { recursive: true })
+    fs.mkdirSync(outputDir, { recursive: true })
+    fs.writeFileSync(`${inputDir}/job.py`, script)
+  } catch (err) {
+    // Return a failed process-like object
+    const failProc = new EventEmitter()
+    process.nextTick(() => failProc.emit('error', err))
+    return failProc
+  }
+
+  const proc = spawn('nsjail', [
+    '--mode', 'o',
+    '--time_limit', '120',
+    '--max_cpus', '2',
+    '--rlimit_as', '4096',
+    '--disable_proc',
+    '--iface_no_lo',
+    '--bindmount', `${inputDir}:/input:ro`,
+    '--bindmount', `${outputDir}:/output:rw`,
+    '--cwd', '/input',
+    '--',
+    'python3', '/input/job.py'
+  ], { stdio: ['ignore', 'pipe', 'pipe'] })
+
+  // Wrap the nsjail process to clean up temp files on exit
+  const originalOn = proc.on.bind(proc)
+  proc.on = function(event, listener) {
+    if (event === 'close') {
+      return originalOn(event, (code) => {
+        try { fs.rmSync(tmpDir, { recursive: true }) } catch {}
+        listener(code)
+      })
+    }
+    return originalOn(event, listener)
+  }
+
+  return proc
+}
+
 // ─── Job runner ───────────────────────────────────────────────────────────────
 function runJob(job) {
   const { jobId, peer, type } = job
 
-  const proc = spawn('python3', ['-c', pythonCodeFor(type)], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const proc = runInSandbox(jobId, type)
   job.proc = proc
 
   // ── Heartbeat loop ────────────────────────────────────────────────────────
@@ -403,6 +475,33 @@ function fmtUptime() {
   return m > 0 ? `${m}m ${s % 60}s` : `${s}s`
 }
 
+// ─── State API (used by provider-ui) ─────────────────────────────────────────
+export function getState() {
+  const jobs = []
+  for (const [jobId, job] of activeJobs) {
+    jobs.push({
+      jobId,
+      type: job.type,
+      status: job.status,
+      heartbeatCount: job.heartbeatCount,
+      paymentReceived: job.paymentReceived,
+      startedAt: job.startedAt,
+      estimatedMinutes: job.estimatedMinutes || 1,
+    })
+  }
+  return {
+    providerId: PROVIDER_ID,
+    uptime: fmtUptime(),
+    peers: peers.size,
+    totalEarned,
+    capacity: { cores: CFG.cores, ramGB: CFG.ramGB, maxJobs: CFG.maxJobs },
+    activeJobs: jobs,
+    recentLog: logLines.slice(-8),
+    logKey: b4a.toString(jobCore.key, 'hex'),
+    completedJobs,
+  }
+}
+
 // ─── Terminal UI ──────────────────────────────────────────────────────────────
 function renderUI() {
   console.clear()
@@ -447,8 +546,12 @@ function renderUI() {
   }
 }
 
-setInterval(renderUI, 3_000)
-renderUI()
+if (process.env.PEAR_STATE_PIPE) {
+  setInterval(() => process.stdout.write(JSON.stringify(getState()) + '\n'), 1000)
+} else {
+  setInterval(renderUI, 3_000)
+  renderUI()
+}
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 teardown(async () => {

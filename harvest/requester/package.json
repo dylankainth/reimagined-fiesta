@@ -2,17 +2,23 @@
   "name": "harvest-requester",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.mjs",
+  "main": "index.js",
+  "pear": {
+    "name": "harvest-requester",
+    "type": "terminal"
+  },
   "scripts": {
     "start": "node index.mjs",
     "dev": "node index.mjs"
   },
   "dependencies": {
     "@harvest/shared": "file:../shared",
-    "hyperswarm": "^4.17.0",
-    "corestore": "^7.9.2",
-    "protomux": "^3.10.0",
+    "b4a": "^1.6.7",
+    "bare-crypto": "^1.13.4",
+    "bare-process": "^4.4.1",
     "compact-encoding": "^2.15.0",
-    "b4a": "^1.6.7"
+    "corestore": "^7.9.2",
+    "hyperswarm": "^4.17.0",
+    "protomux": "^3.10.0"
   }
 }
