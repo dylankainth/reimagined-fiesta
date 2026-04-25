@@ -3,10 +3,10 @@ import { spawn } from 'child_process'
 import { createServer } from 'http'
 import { join } from 'path'
 
-const isPear = Boolean(globalThis.Pear)
 const procGlobal = globalThis.process
 const appDir = globalThis.Pear?.config?.dir ?? procGlobal?.cwd?.() ?? '.'
 const providerPath = join(appDir, '../provider/index.mjs')
+const providerStorage = join(appDir, '../provider/provider-ui-storage')
 
 let currentState = {
   providerId: null,
@@ -21,12 +21,16 @@ let currentState = {
 }
 
 // Resolve node binary
-const nodeBin = !isPear && procGlobal?.env?.NVM_BIN
+const nodeBin = procGlobal?.env?.NVM_BIN
   ? join(procGlobal.env.NVM_BIN, 'node')
-  : 'node'
+  : '/home/dylan/.nvm/versions/node/v22.22.2/bin/node'
 
 const proc = spawn(nodeBin, [providerPath], {
-  env: procGlobal?.env ? { ...procGlobal.env, PEAR_STATE_PIPE: '1' } : undefined,
+  env: {
+    ...(procGlobal?.env ?? {}),
+    PEAR_STATE_PIPE: '1',
+    PROVIDER_STORAGE: providerStorage,
+  },
   stdio: ['ignore', 'pipe', 'inherit'],
   cwd: join(appDir, '../provider'),
 })
@@ -45,24 +49,27 @@ proc.stdout.on('data', (chunk) => {
 proc.on('error', (err) => console.error('Provider spawn error:', err.message))
 proc.on('exit', (code) => console.log('Provider exited:', code))
 
-// SSE server — renderer polls this
-const SSE_PORT = 4321
-const server = createServer((req, res) => {
-  if (req.url !== '/state') { res.writeHead(404); res.end(); return }
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
+// SSE server is only needed outside Pear. Pear desktop uses Pear.pipe.
+let server = null
+if (!globalThis.Pear?.pipe) {
+  const SSE_PORT = 4321
+  server = createServer((req, res) => {
+    if (req.url !== '/state') { res.writeHead(404); res.end(); return }
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    })
+    const send = () => {
+      try { res.write(`data: ${JSON.stringify(currentState)}\n\n`) } catch {}
+    }
+    send()
+    const id = setInterval(send, 1000)
+    req.on('close', () => clearInterval(id))
   })
-  const send = () => {
-    try { res.write(`data: ${JSON.stringify(currentState)}\n\n`) } catch {}
-  }
-  send()
-  const id = setInterval(send, 1000)
-  req.on('close', () => clearInterval(id))
-})
-server.listen(SSE_PORT, '127.0.0.1')
+  server.listen(SSE_PORT, '127.0.0.1')
+}
 
 // Also push via Pear.pipe if desktop IPC is available
 if (globalThis.Pear?.pipe) {
@@ -73,6 +80,6 @@ if (globalThis.Pear?.pipe) {
   }, 1000)
 }
 
-const cleanup = () => { proc.kill('SIGTERM'); server.close() }
+const cleanup = () => { proc.kill('SIGTERM'); server?.close() }
 if (globalThis.Pear) Pear.teardown(cleanup)
 else procGlobal?.on?.('exit', cleanup)

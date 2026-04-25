@@ -70,7 +70,7 @@ function log(line) {
 }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
-const storagePath = pearConfig?.storage ?? './requester-storage'
+const storagePath = argv.storage ?? pearConfig?.storage ?? './requester-storage'
 const store = new Corestore(storagePath)
 await store.ready()
 log('Corestore ready')

@@ -1,3 +1,10 @@
 node_modules/
 provider-storage/
 requester-storage/
+
+# Generated runtime storage (Corestore/RocksDB/Hyperbee)
+**/*-storage/
+**/*-ui-storage/
+
+# Local requester mux test stores
+requester/tmp-mux-test-*/
