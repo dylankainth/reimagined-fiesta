@@ -8,15 +8,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "events": "^3.3.0",
+    "hypercore": "^10.0.0",
+    "hypercore-crypto": "^3.6.1",
+    "hyperswarm": "^4.17.0",
+    "pear": "^1.0.0",
+    "process": "^0.11.10",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "pear": "^1.0.0",
-    "hypercore": "^10.0.0",
-    "hyperswarm": "^4.17.0",
-    "hypercore-crypto": "^3.6.1"
+    "stream-browserify": "^3.0.0",
+    "util": "^0.12.5"
   },
   "devDependencies": {
-    "vite": "^5.0.0",
-    "@vitejs/plugin-react": "^4.0.0"
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite": "^5.0.0"
   }
 }
