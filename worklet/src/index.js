@@ -5,6 +5,8 @@ const Hyperswarm = require('hyperswarm')
 const crypto = require('hypercore-crypto')
 const b4a = require('b4a')
 
+const PEER_ID_LENGTH = 16
+
 let identity = null
 let swarm = null
 
@@ -14,11 +16,18 @@ function send(type, data) {
 
 IPC.on('data', (raw) => {
   let msg
-  try { msg = JSON.parse(raw.toString()) } catch { return }
+  try {
+    msg = JSON.parse(raw.toString())
+  } catch (err) {
+    return send('ERROR', { message: 'Invalid IPC message: ' + err.message })
+  }
   const { type, data } = msg
 
   if (type === 'CREATE_IDENTITY') return createIdentity(data)
-  if (type === 'LOAD_IDENTITY') return (identity = data, send('IDENTITY_LOADED', identity))
+  if (type === 'LOAD_IDENTITY') {
+    identity = data
+    return send('IDENTITY_LOADED', identity)
+  }
   if (type === 'START_SESSION') return startSession()
   if (type === 'JOIN_SESSION') return joinSession(data.topic)
   if (type === 'END_SESSION') return endSession()
@@ -35,92 +44,143 @@ function createIdentity({ name, dob }) {
     v: 1,
   }
 
-  const sig = crypto.sign(Buffer.from(JSON.stringify(payload)), keyPair.secretKey)
+  const payloadBuf = Buffer.from(JSON.stringify(payload))
+  const sig = crypto.sign(payloadBuf, keyPair.secretKey)
 
   identity = {
     ...payload,
     signature: b4a.toString(sig, 'hex'),
-    privateKey: b4a.toString(keyPair.secretKey, 'hex'),
+    _privateKey: b4a.toString(keyPair.secretKey, 'hex'),
   }
 
-  send('IDENTITY_CREATED', identity)
+  const publicIdentity = { ...payload, signature: identity.signature }
+  send('IDENTITY_CREATED', publicIdentity)
 }
 
 async function startSession() {
   await endSession()
 
-  const topic = crypto.randomBytes(32)
-  swarm = new Hyperswarm()
+  try {
+    const topic = crypto.randomBytes(32)
+    swarm = new Hyperswarm()
 
-  swarm.on('connection', (conn) => {
-    const peerId = b4a.toString(conn.remotePublicKey, 'hex').slice(0, 16)
-    send('PEER_CONNECTED', { peerId })
+    swarm.on('connection', (conn) => {
+      const peerId = b4a.toString(conn.remotePublicKey, 'hex').slice(0, PEER_ID_LENGTH)
+      send('PEER_CONNECTED', { peerId })
 
-    if (identity) {
-      const { name, dob, publicKey, signature, issuedAt, v } = identity
-      conn.write(Buffer.from(JSON.stringify({ type: 'ID_DATA', data: { name, dob, publicKey, signature, issuedAt, v } })))
-    }
+      if (identity) {
+        const { name, dob, publicKey, signature, issuedAt, v } = identity
+        const idPayload = JSON.stringify({ type: 'ID_DATA', data: { name, dob, publicKey, signature, issuedAt, v } })
+        conn.write(Buffer.from(idPayload))
+      }
 
-    conn.on('data', (d) => {
-      try {
-        const m = JSON.parse(d.toString())
-        if (m.type === 'ACK_VERIFIED') send('IDENTITY_VERIFIED', { peerId })
-      } catch {}
+      const onData = (d) => {
+        try {
+          const m = JSON.parse(d.toString())
+          if (m.type === 'ACK_VERIFIED') send('IDENTITY_VERIFIED', { peerId })
+        } catch (err) {
+          send('ERROR', { message: 'Failed to parse peer message: ' + err.message })
+        }
+      }
+
+      const onClose = () => {
+        conn.removeListener('data', onData)
+        send('PEER_DISCONNECTED', { peerId })
+      }
+
+      const onError = (err) => {
+        send('ERROR', { message: 'Connection error: ' + err.message })
+      }
+
+      conn.on('data', onData)
+      conn.on('close', onClose)
+      conn.on('error', onError)
     })
 
-    conn.on('close', () => send('PEER_DISCONNECTED', { peerId }))
-    conn.on('error', () => {})
-  })
-
-  await swarm.join(topic, { server: true, client: false }).flushed()
-  send('SESSION_STARTED', { topic: b4a.toString(topic, 'hex') })
+    await swarm.join(topic, { server: true, client: false }).flushed()
+    send('SESSION_STARTED', { topic: b4a.toString(topic, 'hex') })
+  } catch (err) {
+    send('ERROR', { message: 'Failed to start session: ' + err.message })
+  }
 }
 
 async function joinSession(topicHex) {
   await endSession()
 
-  const topic = b4a.from(topicHex, 'hex')
-  swarm = new Hyperswarm()
+  try {
+    const topic = b4a.from(topicHex, 'hex')
+    swarm = new Hyperswarm()
 
-  swarm.on('connection', (conn) => {
-    const peerId = b4a.toString(conn.remotePublicKey, 'hex').slice(0, 16)
-    send('PEER_CONNECTED', { peerId })
+    swarm.on('connection', (conn) => {
+      const peerId = b4a.toString(conn.remotePublicKey, 'hex').slice(0, PEER_ID_LENGTH)
+      send('PEER_CONNECTED', { peerId })
 
-    conn.on('data', (raw) => {
-      try {
-        const m = JSON.parse(raw.toString())
-        if (m.type !== 'ID_DATA') return
+      const onData = (raw) => {
+        try {
+          const m = JSON.parse(raw.toString())
+          if (m.type !== 'ID_DATA') return
 
-        const received = m.data
-        const verifyPayload = { name: received.name, dob: received.dob, publicKey: received.publicKey, issuedAt: received.issuedAt, v: received.v }
-        const valid = crypto.verify(
-          Buffer.from(JSON.stringify(verifyPayload)),
-          b4a.from(received.signature, 'hex'),
-          b4a.from(received.publicKey, 'hex')
-        )
+          const received = m.data
 
-        conn.write(Buffer.from(JSON.stringify({ type: 'ACK_VERIFIED' })))
-        send('ID_RECEIVED', { identity: received, valid, verifiedAt: new Date().toISOString() })
-      } catch (e) {
-        send('ERROR', { message: e.message })
+          const verifyPayload = { name: received.name, dob: received.dob, publicKey: received.publicKey, issuedAt: received.issuedAt, v: received.v }
+          const verifyBuf = Buffer.from(JSON.stringify(verifyPayload))
+          const sigBuf = b4a.from(received.signature, 'hex')
+          const pubKeyBuf = b4a.from(received.publicKey, 'hex')
+
+          let valid = false
+          try {
+            valid = crypto.verify(verifyBuf, sigBuf, pubKeyBuf)
+          } catch {
+            valid = false
+          }
+
+          conn.write(Buffer.from(JSON.stringify({ type: 'ACK_VERIFIED' })))
+          send('ID_RECEIVED', { identity: received, valid, verifiedAt: new Date().toISOString() })
+        } catch (err) {
+          send('ERROR', { message: 'Failed to process ID_DATA: ' + err.message })
+        }
       }
+
+      const onClose = () => {
+        conn.removeListener('data', onData)
+        send('PEER_DISCONNECTED', { peerId })
+      }
+
+      const onError = (err) => {
+        send('ERROR', { message: 'Connection error: ' + err.message })
+      }
+
+      conn.on('data', onData)
+      conn.on('close', onClose)
+      conn.on('error', onError)
     })
 
-    conn.on('close', () => send('PEER_DISCONNECTED', { peerId }))
-    conn.on('error', () => {})
-  })
-
-  swarm.join(topic, { server: false, client: true })
-  send('SESSION_JOINED', { topic: topicHex })
+    await swarm.join(topic, { server: false, client: true }).flushed()
+    send('SESSION_JOINED', { topic: topicHex })
+  } catch (err) {
+    send('ERROR', { message: 'Failed to join session: ' + err.message })
+  }
 }
 
 async function endSession() {
   if (!swarm) return
-  await swarm.destroy()
+  try {
+    await swarm.destroy()
+  } catch (err) {
+    send('ERROR', { message: 'Failed to destroy swarm: ' + err.message })
+  }
   swarm = null
   send('SESSION_ENDED', null)
 }
 
-Bare.on('exit', () => { if (swarm) swarm.destroy() })
+Bare.on('exit', async () => {
+  if (swarm) {
+    try {
+      await swarm.destroy()
+    } catch (err) {
+      console.error('Cleanup error:', err)
+    }
+  }
+})
 
 send('READY', null)
