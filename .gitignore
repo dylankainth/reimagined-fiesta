@@ -1,0 +1,31 @@
+# Harvest Storage Directories (Database files with locks)
+harvest/provider/*-storage*/
+harvest/provider-ui/*-storage*/
+harvest/requester/*-storage*/
+harvest/requester-ui/*-storage*/
+harvest/combined-ui/*-storage*/
+
+# Node.js
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Electron
+dist/
+build/
+
+# Database Lock Files (causing git permission errors)
+**/LOCK
+**/LOG*
+**/MANIFEST-*
+**/CURRENT
+**/IDENTITY
+**/SESSION_ID
+**/*.sst
+**/OPTIONS-*
+**/*.db
+**/*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db
