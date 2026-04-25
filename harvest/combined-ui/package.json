@@ -1,12 +1,12 @@
 {
-  "name": "harvest-combined-ui",
-  "version": "1.0.0",
-  "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "dev": "electron ."
-  },
-  "devDependencies": {
-    "electron": "^41.3.0"
-  }
+    "name": "harvest-combined-ui",
+    "version": "1.0.0",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "dev": "electron ."
+    },
+    "devDependencies": {
+        "electron": "^41.3.0"
+    }
 }

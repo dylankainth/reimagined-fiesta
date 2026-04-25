@@ -1,556 +1,598 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Harvest — Provider & Requester</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harvest — Provider & Requester</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    :root {
-      --bg: #0f0f0f;
-      --card: #1a1a1a;
-      --border: #2a2a2a;
-      --green: #00ff88;
-      --blue: #4488ff;
-      --purple: #aa66ff;
-      --amber: #ffaa33;
-      --red: #ff4466;
-      --dim: #888888;
-      --text: #ffffff;
-      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-      --sans: system-ui, -apple-system, sans-serif;
-    }
+        :root {
+            --bg: #0f0f0f;
+            --card: #1a1a1a;
+            --border: #2a2a2a;
+            --green: #00ff88;
+            --blue: #4488ff;
+            --purple: #aa66ff;
+            --amber: #ffaa33;
+            --red: #ff4466;
+            --dim: #888888;
+            --text: #ffffff;
+            --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            --sans: system-ui, -apple-system, sans-serif;
+        }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      font-size: 14px;
-      line-height: 1.5;
-      padding: 0;
-      user-select: none;
-      -webkit-user-select: none;
-    }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            font-size: 14px;
+            line-height: 1.5;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
 
-    /* ── Tab System ─────────────────────────────────────────────────────────── */
-    .tab-bar {
-      display: flex;
-      background: var(--card);
-      border-bottom: 1px solid var(--border);
-    }
-    
-    .tab-button {
-      padding: 12px 20px;
-      background: transparent;
-      border: none;
-      color: var(--dim);
-      font-family: var(--mono);
-      font-size: 13px;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
-    }
-    
-    .tab-button:hover {
-      color: var(--text);
-      background: rgba(255,255,255,0.05);
-    }
-    
-    .tab-button.active {
-      color: var(--green);
-      border-bottom-color: var(--green);
-    }
-    
-    .tab-content {
-      display: none;
-      padding: 20px;
-    }
-    
-    .tab-content.active {
-      display: block;
-    }
+        /* ── Tab System ─────────────────────────────────────────────────────────── */
+        .tab-bar {
+            display: flex;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+        }
 
-    /* ── Header ─────────────────────────────────────────────────────────────── */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--border);
-    }
+        .tab-button {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            color: var(--dim);
+            font-family: var(--mono);
+            font-size: 13px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
 
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+        .tab-button:hover {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.05);
+        }
 
-    .logo {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      color: var(--green);
-      font-family: var(--mono);
-    }
+        .tab-button.active {
+            color: var(--green);
+            border-bottom-color: var(--green);
+        }
 
-    .logo-sep {
-      color: var(--border);
-    }
+        .tab-content {
+            display: none;
+            padding: 20px;
+        }
 
-    .node-label {
-      color: var(--dim);
-      font-size: 13px;
-    }
+        .tab-content.active {
+            display: block;
+        }
 
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
+        /* ── Header ─────────────────────────────────────────────────────────────── */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
 
-    .header-meta {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--dim);
-    }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
 
-    .header-meta span {
-      color: var(--text);
-    }
+        .logo {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--green);
+            font-family: var(--mono);
+        }
 
-    .live-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 6px var(--green);
-      animation: pulse 2s ease-in-out infinite;
-      flex-shrink: 0;
-    }
+        .logo-sep {
+            color: var(--border);
+        }
 
-    .live-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--green);
-      font-family: var(--mono);
-    }
+        .node-label {
+            color: var(--dim);
+            font-size: 13px;
+        }
 
-    .budget-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--amber);
-      font-family: var(--mono);
-    }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--green); }
-      50% { opacity: 0.4; box-shadow: 0 0 2px var(--green); }
-    }
+        .header-meta {
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--dim);
+        }
 
-    /* ── Cards ───────────────────────────────────────────────────────────────── */
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px 20px;
-      margin-bottom: 16px;
-    }
+        .header-meta span {
+            color: var(--text);
+        }
 
-    .card-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--dim);
-      margin-bottom: 6px;
-    }
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+            animation: pulse 2s ease-in-out infinite;
+            flex-shrink: 0;
+        }
 
-    .card-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 12px;
-      letter-spacing: 0.02em;
-    }
+        .live-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--green);
+            font-family: var(--mono);
+        }
 
-    /* ── Metrics ─────────────────────────────────────────────────────────────── */
-    .metrics {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
+        .budget-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--amber);
+            font-family: var(--mono);
+        }
 
-    .metric-value {
-      font-family: var(--mono);
-      font-size: 24px;
-      font-weight: 700;
-      line-height: 1.2;
-      margin-bottom: 4px;
-    }
+        @keyframes pulse {
 
-    .metric-sub {
-      font-size: 11px;
-      color: var(--dim);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
+            0%,
+            100% {
+                opacity: 1;
+                box-shadow: 0 0 6px var(--green);
+            }
 
-    .green { color: var(--green); }
+            50% {
+                opacity: 0.4;
+                box-shadow: 0 0 2px var(--green);
+            }
+        }
 
-    /* ── Common Styles ───────────────────────────────────────────────────────── */
-    .no-jobs, .no-job {
-      text-align: center;
-      color: var(--dim);
-      padding: 30px;
-      font-size: 13px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      margin-bottom: 16px;
-    }
+        /* ── Cards ───────────────────────────────────────────────────────────────── */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 16px;
+        }
 
-    .log-line {
-      font-family: var(--mono);
-      font-size: 11px;
-      line-height: 1.7;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+        .card-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--dim);
+            margin-bottom: 6px;
+        }
 
-    .log-line.complete { color: var(--green); }
-    .log-line.payment { color: var(--amber); }
-    .log-line.hb { color: #666; }
-    .log-line.error { color: var(--red); }
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 12px;
+            letter-spacing: 0.02em;
+        }
 
-    .footer {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 14px;
-      font-size: 11px;
-      color: #444;
-      font-family: var(--mono);
-    }
+        /* ── Metrics ─────────────────────────────────────────────────────────────── */
+        .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
 
-    /* ── Provider specific styles ────────────────────────────────────────────── */
-    .job-card {
-      background: #1e1e1e;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 14px;
-      margin-bottom: 8px;
-    }
+        .metric-value {
+            font-family: var(--mono);
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
 
-    .job-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
+        .metric-sub {
+            font-size: 11px;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
 
-    .type-badge {
-      font-family: var(--mono);
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-weight: 600;
-      flex-shrink: 0;
-    }
+        .green {
+            color: var(--green);
+        }
 
-    .badge-ml {
-      background: #1a2a44;
-      color: #66aaff;
-      border: 1px solid #2a4a88;
-    }
+        /* ── Common Styles ───────────────────────────────────────────────────────── */
+        .no-jobs,
+        .no-job {
+            text-align: center;
+            color: var(--dim);
+            padding: 30px;
+            font-size: 13px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
 
-    .job-id {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--dim);
-      flex: 1;
-    }
+        .log-line {
+            font-family: var(--mono);
+            font-size: 11px;
+            line-height: 1.7;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
-    .job-earned {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--green);
-      font-weight: 600;
-    }
+        .log-line.complete {
+            color: var(--green);
+        }
 
-    .progress-track {
-      height: 6px;
-      background: #222;
-      border-radius: 3px;
-      overflow: hidden;
-      margin-bottom: 8px;
-    }
+        .log-line.payment {
+            color: var(--amber);
+        }
 
-    .progress-fill {
-      height: 100%;
-      background: var(--green);
-      border-radius: 3px;
-      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
-    }
+        .log-line.hb {
+            color: #666;
+        }
 
-    .job-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 12px;
-    }
+        .log-line.error {
+            color: var(--red);
+        }
 
-    .job-epoch {
-      color: var(--dim);
-      font-family: var(--mono);
-    }
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 14px;
+            font-size: 11px;
+            color: #444;
+            font-family: var(--mono);
+        }
 
-    .hb-indicator {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--dim);
-      font-family: var(--mono);
-      font-size: 11px;
-    }
+        /* ── Provider specific styles ────────────────────────────────────────────── */
+        .job-card {
+            background: #1e1e1e;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 14px;
+            margin-bottom: 8px;
+        }
 
-    .hb-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--green);
-      animation: pulse 1.5s ease-in-out infinite;
-    }
+        .job-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
 
-    /* ── Requester specific styles ───────────────────────────────────────────── */
-    .budget-track {
-      height: 4px;
-      background: #222;
-      border-radius: 2px;
-      overflow: hidden;
-      margin-top: 8px;
-    }
+        .type-badge {
+            font-family: var(--mono);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
 
-    .budget-fill {
-      height: 100%;
-      background: var(--amber);
-      border-radius: 2px;
-      transition: width 1s ease;
-    }
+        .badge-ml {
+            background: #1a2a44;
+            color: #66aaff;
+            border: 1px solid #2a4a88;
+        }
 
-    .channel-status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-family: var(--mono);
-      font-size: 13px;
-      margin-bottom: 12px;
-    }
+        .job-id {
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--dim);
+            flex: 1;
+        }
 
-    .chan-dot {
-      width: 8px; 
-      height: 8px; 
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
+        .job-earned {
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--green);
+            font-weight: 600;
+        }
 
-    .chan-open { 
-      background: var(--green); 
-      box-shadow: 0 0 6px var(--green); 
-      animation: pulse 2s infinite; 
-    }
+        .progress-track {
+            height: 6px;
+            background: #222;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
 
-    .chan-none { background: #333; }
+        .progress-fill {
+            height: 100%;
+            background: var(--green);
+            border-radius: 3px;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
+        }
 
-    .tick-line {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--dim);
-      margin-bottom: 4px;
-    }
+        .job-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
 
-    .tick-amount { color: var(--green); }
+        .job-epoch {
+            color: var(--dim);
+            font-family: var(--mono);
+        }
 
-    .provider-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 0;
-      border-bottom: 1px solid #1e1e1e;
-      font-family: var(--mono);
-      font-size: 12px;
-    }
+        .hb-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--dim);
+            font-family: var(--mono);
+            font-size: 11px;
+        }
 
-    .provider-row:last-child { border-bottom: none; }
+        .hb-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
 
-    .prov-dot {
-      width: 6px; 
-      height: 6px; 
-      border-radius: 50%; 
-      flex-shrink: 0;
-    }
+        /* ── Requester specific styles ───────────────────────────────────────────── */
+        .budget-track {
+            height: 4px;
+            background: #222;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
 
-    .prov-dot.active { 
-      background: var(--green); 
-      box-shadow: 0 0 4px var(--green); 
-      animation: pulse 2s infinite; 
-    }
+        .budget-fill {
+            height: 100%;
+            background: var(--amber);
+            border-radius: 2px;
+            transition: width 1s ease;
+        }
 
-    .prov-dot.inactive { background: #444; }
+        .channel-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--mono);
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
 
-    .prov-id { 
-      color: var(--text); 
-      flex-shrink: 0; 
-      width: 90px; 
-    }
+        .chan-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
 
-    .prov-caps { 
-      color: var(--dim); 
-      flex: 1; 
-    }
+        .chan-open {
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+            animation: pulse 2s infinite;
+        }
 
-    .prov-price { 
-      color: var(--amber); 
-      flex-shrink: 0; 
-    }
+        .chan-none {
+            background: #333;
+        }
 
-    .spin {
-      display: inline-block;
-      animation: spin 2s linear infinite;
-      margin-right: 6px;
-    }
+        .tick-line {
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--dim);
+            margin-bottom: 4px;
+        }
 
-    @keyframes spin { 
-      to { transform: rotate(360deg); } 
-    }
+        .tick-amount {
+            color: var(--green);
+        }
 
-    .section-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 12px;
-      letter-spacing: 0.02em;
-    }
-  </style>
+        .provider-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #1e1e1e;
+            font-family: var(--mono);
+            font-size: 12px;
+        }
+
+        .provider-row:last-child {
+            border-bottom: none;
+        }
+
+        .prov-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .prov-dot.active {
+            background: var(--green);
+            box-shadow: 0 0 4px var(--green);
+            animation: pulse 2s infinite;
+        }
+
+        .prov-dot.inactive {
+            background: #444;
+        }
+
+        .prov-id {
+            color: var(--text);
+            flex-shrink: 0;
+            width: 90px;
+        }
+
+        .prov-caps {
+            color: var(--dim);
+            flex: 1;
+        }
+
+        .prov-price {
+            color: var(--amber);
+            flex-shrink: 0;
+        }
+
+        .spin {
+            display: inline-block;
+            animation: spin 2s linear infinite;
+            margin-right: 6px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 12px;
+            letter-spacing: 0.02em;
+        }
+    </style>
 </head>
+
 <body>
-  <!-- Tab Navigation -->
-  <div class="tab-bar">
-    <button class="tab-button active" onclick="switchTab('provider')">Provider Node</button>
-    <button class="tab-button" onclick="switchTab('requester')">Requester Node</button>
-  </div>
+    <!-- Tab Navigation -->
+    <div class="tab-bar">
+        <button class="tab-button active" onclick="switchTab('provider')">Provider Node</button>
+        <button class="tab-button" onclick="switchTab('requester')">Requester Node</button>
+    </div>
 
-  <!-- Provider Tab Content -->
-  <div id="provider-tab" class="tab-content active">
-    <div class="header">
-      <div class="header-left">
-        <div class="logo">HARVEST</div>
-        <div class="logo-sep">·</div>
-        <div class="node-label">Provider Node</div>
-      </div>
-      <div class="header-right">
-        <div class="header-meta">ID: <span id="provider-id">loading…</span></div>
-        <div class="header-meta">uptime: <span id="provider-uptime">0s</span></div>
-        <div class="live-badge">
-          <div class="live-dot"></div> LIVE
+    <!-- Provider Tab Content -->
+    <div id="provider-tab" class="tab-content active">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">HARVEST</div>
+                <div class="logo-sep">·</div>
+                <div class="node-label">Provider Node</div>
+            </div>
+            <div class="header-right">
+                <div class="header-meta">ID: <span id="provider-id">loading…</span></div>
+                <div class="header-meta">uptime: <span id="provider-uptime">0s</span></div>
+                <div class="live-badge">
+                    <div class="live-dot"></div> LIVE
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
 
-    <div class="metrics">
-      <div class="card">
-        <div class="card-label">Total Earned</div>
-        <div class="metric-value green" id="provider-earned">$0.000000</div>
-        <div class="metric-sub">USDT</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Active Jobs</div>
-        <div class="metric-value" id="provider-active-jobs">0 / 3</div>
-        <div class="metric-sub" id="provider-completed-jobs">0 completed</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Peers</div>
-        <div class="metric-value" id="provider-peers">0</div>
-        <div class="metric-sub">connected</div>
-      </div>
-    </div>
-
-    <div class="section-title">Active Jobs</div>
-    <div id="provider-jobs-container" class="jobs-list">
-      <div class="no-jobs">○&nbsp; Waiting for work…</div>
-    </div>
-
-    <div class="card">
-      <div class="section-title" style="margin-bottom:8px;">Live Log</div>
-      <div id="provider-log-lines"></div>
-    </div>
-
-    <div class="footer">
-      <span id="provider-logkey">logKey: —</span>
-      <span id="provider-last-update">—</span>
-    </div>
-  </div>
-
-  <!-- Requester Tab Content -->
-  <div id="requester-tab" class="tab-content">
-    <div class="header">
-      <div class="header-left">
-        <div class="logo">HARVEST</div>
-        <div class="logo-sep">·</div>
-        <div class="node-label">Requester Node</div>
-      </div>
-      <div class="header-right">
-        <div class="header-meta">ID: <span id="requester-id">loading…</span></div>
-        <div class="budget-badge">Budget: <span id="requester-budget">$0.0500</span> USDT</div>
-      </div>
-    </div>
-
-    <div class="card" id="requester-job-card">
-      <div class="card-title">Active Job</div>
-      <div id="requester-job-inner">
-        <div class="no-job"><span class="spin">◌</span> Scanning for providers…</div>
-      </div>
-    </div>
-
-    <div class="card" id="requester-payment-card">
-      <div class="card-title">Payment Stream</div>
-      <div class="channel-status">
-        <div class="chan-dot chan-none" id="requester-chan-dot"></div>
-        <span id="requester-chan-label" style="font-family:var(--mono);color:var(--dim);">○ NONE</span>
-      </div>
-      <div class="tick-line" id="requester-tick-line">Tick #—&nbsp; +$— USDT</div>
-      <div class="budget-track">
-        <div class="budget-fill" id="requester-budget-fill" style="width:0%"></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Provider Market</div>
-      <div id="requester-provider-list">
-        <div style="color:var(--dim);font-family:var(--mono);font-size:12px;padding:8px 0;">
-          Scanning for providers…
+        <div class="metrics">
+            <div class="card">
+                <div class="card-label">Total Earned</div>
+                <div class="metric-value green" id="provider-earned">$0.000000</div>
+                <div class="metric-sub">USDT</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Active Jobs</div>
+                <div class="metric-value" id="provider-active-jobs">0 / 3</div>
+                <div class="metric-sub" id="provider-completed-jobs">0 completed</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Peers</div>
+                <div class="metric-value" id="provider-peers">0</div>
+                <div class="metric-sub">connected</div>
+            </div>
         </div>
-      </div>
+
+        <div class="section-title">Active Jobs</div>
+        <div id="provider-jobs-container" class="jobs-list">
+            <div class="no-jobs">○&nbsp; Waiting for work…</div>
+        </div>
+
+        <div class="card">
+            <div class="section-title" style="margin-bottom:8px;">Live Log</div>
+            <div id="provider-log-lines"></div>
+        </div>
+
+        <div class="footer">
+            <span id="provider-logkey">logKey: —</span>
+            <span id="provider-last-update">—</span>
+        </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Live Log</div>
-      <div id="requester-log-lines"></div>
+    <!-- Requester Tab Content -->
+    <div id="requester-tab" class="tab-content">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">HARVEST</div>
+                <div class="logo-sep">·</div>
+                <div class="node-label">Requester Node</div>
+            </div>
+            <div class="header-right">
+                <div class="header-meta">ID: <span id="requester-id">loading…</span></div>
+                <div class="budget-badge">Budget: <span id="requester-budget">$0.0500</span> USDT</div>
+            </div>
+        </div>
+
+        <div class="card" id="requester-job-card">
+            <div class="card-title">Active Job</div>
+            <div id="requester-job-inner">
+                <div class="no-job"><span class="spin">◌</span> Scanning for providers…</div>
+            </div>
+        </div>
+
+        <div class="card" id="requester-payment-card">
+            <div class="card-title">Payment Stream</div>
+            <div class="channel-status">
+                <div class="chan-dot chan-none" id="requester-chan-dot"></div>
+                <span id="requester-chan-label" style="font-family:var(--mono);color:var(--dim);">○ NONE</span>
+            </div>
+            <div class="tick-line" id="requester-tick-line">Tick #—&nbsp; +$— USDT</div>
+            <div class="budget-track">
+                <div class="budget-fill" id="requester-budget-fill" style="width:0%"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Provider Market</div>
+            <div id="requester-provider-list">
+                <div style="color:var(--dim);font-family:var(--mono);font-size:12px;padding:8px 0;">
+                    Scanning for providers…
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Live Log</div>
+            <div id="requester-log-lines"></div>
+        </div>
+
+        <div class="footer">
+            <span id="requester-job-id-footer">Job ID: —</span>
+            <span id="requester-last-update">—</span>
+        </div>
     </div>
 
-    <div class="footer">
-      <span id="requester-job-id-footer">Job ID: —</span>
-      <span id="requester-last-update">—</span>
-    </div>
-  </div>
-
-  <script src="app.js"></script>
+    <script src="app.js"></script>
 </body>
+
 </html>
