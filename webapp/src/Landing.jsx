@@ -9,7 +9,9 @@ export default function Landing() {
           Verify IDs securely, in seconds
         </h1>
         <p className="landing-subtitle">
-          Your verification partner, grounded in the documents you trust, built for secure onboarding.
+          Your verification partner, grounded in the documents
+          <br />
+          you trust, built for secure onboarding.
         </p>
         <Link to="/dashboard" className="landing-cta">
           Open dashboard
