@@ -1,11 +1,12 @@
 /** @typedef {import('pear-interface')} */ /* global Pear */
 import { spawn } from 'child_process'
 import { createServer } from 'http'
-import { fileURLToPath } from 'url'
-import { join, dirname } from 'path'
+import { join } from 'path'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const providerPath = join(__dirname, '../provider/index.mjs')
+const isPear = Boolean(globalThis.Pear)
+const procGlobal = globalThis.process
+const appDir = globalThis.Pear?.config?.dir ?? procGlobal?.cwd?.() ?? '.'
+const providerPath = join(appDir, '../provider/index.mjs')
 
 let currentState = {
   providerId: null,
@@ -20,14 +21,14 @@ let currentState = {
 }
 
 // Resolve node binary
-const nodeBin = process.env.NVM_BIN
-  ? join(process.env.NVM_BIN, 'node')
+const nodeBin = !isPear && procGlobal?.env?.NVM_BIN
+  ? join(procGlobal.env.NVM_BIN, 'node')
   : 'node'
 
 const proc = spawn(nodeBin, [providerPath], {
-  env: { ...process.env, PEAR_STATE_PIPE: '1' },
+  env: procGlobal?.env ? { ...procGlobal.env, PEAR_STATE_PIPE: '1' } : undefined,
   stdio: ['ignore', 'pipe', 'inherit'],
-  cwd: join(__dirname, '../provider'),
+  cwd: join(appDir, '../provider'),
 })
 
 let buf = ''
@@ -74,4 +75,4 @@ if (globalThis.Pear?.pipe) {
 
 const cleanup = () => { proc.kill('SIGTERM'); server.close() }
 if (globalThis.Pear) Pear.teardown(cleanup)
-else process.on('exit', cleanup)
+else procGlobal?.on?.('exit', cleanup)
