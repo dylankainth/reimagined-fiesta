@@ -1,0 +1,15 @@
+{
+  "name": "harvest-requester-ui",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "pear": {
+    "name": "harvest-requester-ui",
+    "type": "desktop",
+    "gui": {
+      "backgroundColor": "#0f0f0f",
+      "width": 960,
+      "height": 720
+    }
+  }
+}

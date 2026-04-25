@@ -1,0 +1,15 @@
+{
+  "name": "harvest-provider-ui",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "pear": {
+    "name": "harvest-provider-ui",
+    "type": "desktop",
+    "gui": {
+      "backgroundColor": "#0f0f0f",
+      "width": 960,
+      "height": 680
+    }
+  }
+}

@@ -403,6 +403,33 @@ function fmtUptime() {
   return m > 0 ? `${m}m ${s % 60}s` : `${s}s`
 }
 
+// ─── State API (used by provider-ui) ─────────────────────────────────────────
+export function getState() {
+  const jobs = []
+  for (const [jobId, job] of activeJobs) {
+    jobs.push({
+      jobId,
+      type: job.type,
+      status: job.status,
+      heartbeatCount: job.heartbeatCount,
+      paymentReceived: job.paymentReceived,
+      startedAt: job.startedAt,
+      estimatedMinutes: job.estimatedMinutes || 1,
+    })
+  }
+  return {
+    providerId: PROVIDER_ID,
+    uptime: fmtUptime(),
+    peers: peers.size,
+    totalEarned,
+    capacity: { cores: CFG.cores, ramGB: CFG.ramGB, maxJobs: CFG.maxJobs },
+    activeJobs: jobs,
+    recentLog: logLines.slice(-8),
+    logKey: b4a.toString(jobCore.key, 'hex'),
+    completedJobs,
+  }
+}
+
 // ─── Terminal UI ──────────────────────────────────────────────────────────────
 function renderUI() {
   console.clear()
@@ -447,8 +474,12 @@ function renderUI() {
   }
 }
 
-setInterval(renderUI, 3_000)
-renderUI()
+if (process.env.PEAR_STATE_PIPE) {
+  setInterval(() => process.stdout.write(JSON.stringify(getState()) + '\n'), 1000)
+} else {
+  setInterval(renderUI, 3_000)
+  renderUI()
+}
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 teardown(async () => {

@@ -61,6 +61,7 @@ let   lastProgressLine = null
 let   channelStatus    = 'NONE'   // NONE | OPEN | PAUSED | CLOSED
 let   paymentStartedAt = null
 let   lastTickAmount   = 0
+let   jobCompleteData  = null
 
 function log(line) {
   const ts = new Date().toISOString().slice(11, 23)
@@ -296,6 +297,8 @@ function handleJobComplete(data) {
   stopPaymentStream()
   stopWatchdog()
 
+  const duration = currentJob?.acceptedAt ? Math.round((Date.now() - currentJob.acceptedAt) / 1000) : 0
+
   // Final settlement — close the payment channel
   const prov = providers.get(currentJob?.peerId)
   if (prov) {
@@ -305,16 +308,25 @@ function handleJobComplete(data) {
   log(`CHANNEL_CLOSE — final settlement $${totalPaid.toFixed(6)} USDT`)
   log(`JOB_COMPLETE totalCost=$${totalCost.toFixed(6)} totalPaid=$${totalPaid.toFixed(6)}`)
 
-  console.clear()
-  console.log('╔════════════════════════════════════════════════╗')
-  console.log('║             JOB COMPLETED                      ║')
-  console.log('╚════════════════════════════════════════════════╝')
-  console.log(`  Job ID      : ${jobId}`)
-  console.log(`  Total cost  : $${totalCost.toFixed(6)} USDT`)
-  console.log(`  Total paid  : $${totalPaid.toFixed(6)} USDT`)
-  console.log(`  Log key     : ${logPublicKey}`)
-  console.log('  (Verify execution on the Hypercore tamper-evident log)')
-  console.log('')
+  jobCompleteData = {
+    cost: totalPaid,
+    duration,
+    heartbeats: heartbeatCount,
+    logKey: logPublicKey ?? currentJob?.logPublicKey,
+  }
+
+  if (!process.env.PEAR_STATE_PIPE) {
+    console.clear()
+    console.log('╔════════════════════════════════════════════════╗')
+    console.log('║             JOB COMPLETED                      ║')
+    console.log('╚════════════════════════════════════════════════╝')
+    console.log(`  Job ID      : ${jobId}`)
+    console.log(`  Total cost  : $${totalCost.toFixed(6)} USDT`)
+    console.log(`  Total paid  : $${totalPaid.toFixed(6)} USDT`)
+    console.log(`  Log key     : ${logPublicKey}`)
+    console.log('  (Verify execution on the Hypercore tamper-evident log)')
+    console.log('')
+  }
 }
 
 // ─── JOB_FAILED ──────────────────────────────────────────────────────────────
@@ -406,6 +418,50 @@ function resetWatchdog() {
 function stopWatchdog() {
   clearInterval(watchdogTimer)
   watchdogTimer = null
+}
+
+// ─── State API (used by requester-ui) ────────────────────────────────────────
+export function getState() {
+  const provList = []
+  for (const [peerId, p] of providers) {
+    if (!p.advertise) continue
+    provList.push({
+      peerId,
+      score: scoreProvider(p.advertise),
+      ...p.advertise,
+      active: currentJob?.peerId === peerId,
+    })
+  }
+  provList.sort((a, b) => b.score - a.score)
+
+  const activeJob = currentJob ? {
+    jobId: currentJob.jobId,
+    type:  currentJob.jobType ?? activeJobConfig.jobType,
+    epoch: progressCurrent,
+    total: progressTotal,
+    provider: currentJob.providerId,
+    spent: totalPaid,
+    maxBudget: activeJobConfig.maxBudgetUSDT,
+    hbCount: heartbeatCount,
+    lastHb: lastHeartbeatAt,
+    channelStatus,
+    score: currentJob.score,
+    reputation: currentJob.rep,
+    status: jobStatus,
+    tickIndex,
+    lastTickAmount,
+    paymentStartedAt,
+  } : null
+
+  return {
+    requesterId: SELF_ID,
+    budget: activeJobConfig.maxBudgetUSDT,
+    providers: provList,
+    activeJob,
+    recentLog: logLines.slice(-8),
+    jobComplete: jobCompleteData,
+    jobStatus,
+  }
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -514,8 +570,12 @@ function renderUI() {
   }
 }
 
-setInterval(renderUI, 2_000)
-renderUI()
+if (process.env.PEAR_STATE_PIPE) {
+  setInterval(() => process.stdout.write(JSON.stringify(getState()) + '\n'), 1000)
+} else {
+  setInterval(renderUI, 2_000)
+  renderUI()
+}
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 teardown(async () => {
