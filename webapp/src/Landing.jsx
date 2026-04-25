@@ -4,10 +4,17 @@ import './Landing.css'
 export default function Landing() {
   return (
     <div className="landing">
-      <h1 className="landing-title">Verify IDs with confidence</h1>
-      <Link to="/dashboard" className="landing-cta">
-        Open dashboard
-      </Link>
+      <header className="landing-hero">
+        <h1 className="landing-title">
+          Verify IDs securely, in seconds
+        </h1>
+        <p className="landing-subtitle">
+          Your verification partner, grounded in the documents you trust, built for secure onboarding.
+        </p>
+        <Link to="/dashboard" className="landing-cta">
+          Open dashboard
+        </Link>
+      </header>
     </div>
   )
 }
