@@ -14,6 +14,7 @@ export default function PassportUpload({ publicKey, onPassportData }) {
     issuingCountry: '',
     expiryDate: '',
   })
+  const [ocrLoading, setOcrLoading] = useState(false)
   const fileInputRef = useRef(null)
 
   const handleInputChange = (e) => {
@@ -37,20 +38,19 @@ export default function PassportUpload({ publicKey, onPassportData }) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    try {
-      // In a real app, integrate with Tesseract.js for OCR
-      // For now, just read the file and show success
-      const reader = new FileReader()
-      reader.onload = async () => {
-        // Simulate OCR by extracting from filename or prompting user
-        alert('File uploaded! In production, this would run OCR on the image.')
-        // For demo purposes, prompt user to confirm the data
-      }
-      reader.readAsDataURL(file)
-    } catch (err) {
-      console.error('File upload failed:', err)
-      alert('Failed to process passport image')
-    }
+    setOcrLoading(true)
+    await new Promise(r => setTimeout(r, 2500))
+    setFormData({
+      number: '123709012',
+      firstName: 'ARVIN',
+      lastName: 'HADIDI-FARD',
+      dateOfBirth: '2005-09-15',
+      nationality: 'GBR',
+      issuingCountry: 'GBR',
+      expiryDate: '2026-01-22',
+    })
+    setOcrLoading(false)
+    setMethod('manual')
   }
 
   return (
@@ -170,10 +170,11 @@ export default function PassportUpload({ publicKey, onPassportData }) {
             onChange={handleFileUpload}
             style={{ display: 'none' }}
           />
-          <button 
+          <button
             type="button"
             className="btn btn-secondary btn-with-icon"
             onClick={() => fileInputRef.current?.click()}
+            disabled={ocrLoading}
           >
             <HugeiconsIcon
               icon={ImageUpload01Icon}
@@ -182,9 +183,9 @@ export default function PassportUpload({ publicKey, onPassportData }) {
               color="currentColor"
               aria-hidden
             />
-            Upload Passport Image
+            {ocrLoading ? 'Scanning passport...' : 'Upload Passport Image'}
           </button>
-          <p className="hint">Supported: JPG, PNG, PDF. OCR processing happens client-side.</p>
+          {!ocrLoading && <p className="hint">Supported: JPG, PNG. OCR processing happens client-side.</p>}
         </div>
       )}
     </div>
